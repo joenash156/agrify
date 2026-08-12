@@ -105,7 +105,7 @@ export default function DashboardPage() {
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <h2 className={`text-xl sm:text-2xl font-extrabold tracking-tight ${sectionTitle}`}>
-                {formatGreeting(user.firstName)} 👋
+                {formatGreeting(user.firstName)} 
               </h2>
               <p className={`text-xs sm:text-sm mt-0.5 font-medium ${subText}`}>
                 {isAdmin
