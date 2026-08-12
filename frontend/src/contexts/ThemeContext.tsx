@@ -1,39 +1,75 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-
-type Theme = "light" | "dark";
-export type ThemePreference = Theme | "system";
+import type { ThemeMode, ThemePreference } from "../types/theme";
 
 interface ThemeContextType {
-  theme: Theme;
+  theme: ThemeMode;
+  preference: ThemePreference;
+  setTheme: (pref: ThemePreference) => void;
   toggleTheme: () => void;
-  setTheme: (theme: Theme) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const stored = localStorage.getItem("theme") as Theme | null;
-    if (stored) return stored;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
+  const [preference, setPreference] = useState<ThemePreference>(() => {
+    const stored = localStorage.getItem("theme") as ThemePreference | null;
+    if (stored === "light" || stored === "dark" || stored === "system") {
+      return stored;
+    }
+    return "system";
+  });
+
+  const [theme, setThemeState] = useState<ThemeMode>(() => {
+    if (preference === "system") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    return preference;
   });
 
   useEffect(() => {
-    localStorage.setItem("theme", theme);
-    // Sync dark class on <html> for CSS-based dark mode (scrollbars, etc.)
-    if (theme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, [theme]);
+    localStorage.setItem("theme", preference);
 
-  const toggleTheme = () => setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const applyTheme = (isDarkSystem: boolean) => {
+      const activeTheme: ThemeMode =
+        preference === "system"
+          ? isDarkSystem
+            ? "dark"
+            : "light"
+          : preference;
+
+      setThemeState(activeTheme);
+
+      if (activeTheme === "dark") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    };
+
+    applyTheme(mediaQuery.matches);
+
+    if (preference === "system") {
+      const listener = (e: MediaQueryListEvent) => {
+        applyTheme(e.matches);
+      };
+
+      mediaQuery.addEventListener("change", listener);
+      return () => mediaQuery.removeEventListener("change", listener);
+    }
+  }, [preference]);
+
+  const setTheme = (pref: ThemePreference) => {
+    setPreference(pref);
+  };
+
+  const toggleTheme = () => {
+    setPreference((prev) => (prev === "dark" ? "light" : "dark"));
+  };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, preference, setTheme, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );
