@@ -4,6 +4,17 @@ import PublicAppLayout from "./layouts/PublicAppLayout";
 import PrivateAppLayout from "./layouts/PrivateAppLayout";
 import AuthPage from "./pages/public/AuthPage";
 import DashboardPage from "./pages/private/DashboardPage";
+import FarmsPage from "./pages/private/FarmsPage";
+import CropsPage from "./pages/private/CropsPage";
+import DiseasesPage from "./pages/private/DiseasesPage";
+import EquipmentPage from "./pages/private/EquipmentPage";
+import FertilizersPage from "./pages/private/FertilizersPage";
+import HarvestsPage from "./pages/private/HarvestsPage";
+import InventoryPage from "./pages/private/InventoryPage";
+import SalesPage from "./pages/private/SalesPage";
+import PaymentsPage from "./pages/private/PaymentsPage";
+import EmployeesPage from "./pages/private/EmployeesPage";
+import AttendancePage from "./pages/private/AttendancePage";
 
 export function App() {
   return (
@@ -20,6 +31,17 @@ export function App() {
           {/* Protected Private Routes under PrivateAppLayout */}
           <Route element={<PrivateAppLayout />}>
             <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/farms" element={<FarmsPage />} />
+            <Route path="/crops" element={<CropsPage />} />
+            <Route path="/diseases" element={<DiseasesPage />} />
+            <Route path="/equipment" element={<EquipmentPage />} />
+            <Route path="/fertilizers" element={<FertilizersPage />} />
+            <Route path="/harvests" element={<HarvestsPage />} />
+            <Route path="/inventory" element={<InventoryPage />} />
+            <Route path="/sales" element={<SalesPage />} />
+            <Route path="/payments" element={<PaymentsPage />} />
+            <Route path="/employees" element={<EmployeesPage />} />
+            <Route path="/attendance" element={<AttendancePage />} />
           </Route>
 
           {/* Catch-all redirect */}

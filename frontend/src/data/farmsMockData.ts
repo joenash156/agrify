@@ -1,0 +1,96 @@
+import type { Farm } from "../types/farm";
+import type { StatCardData } from "../types/dashboard";
+import {
+  faTractor,
+  faUsers,
+  faSeedling,
+  faMapLocationDot,
+} from "@fortawesome/free-solid-svg-icons";
+
+export const MOCK_FARMS: Farm[] = [
+  {
+    farmId: "farm-001",
+    farmName: "Green Valley Estate",
+    location: "Kumasi, Ashanti Region",
+    size: 48.5,
+    farmStatus: "ACTIVE",
+    employeeCount: 14,
+    cropCount: 5,
+    createdAt: "2022-03-01",
+    updatedAt: "2026-08-10",
+  },
+  {
+    farmId: "farm-002",
+    farmName: "North Fields Agriculture",
+    location: "Tamale, Northern Region",
+    size: 72.0,
+    farmStatus: "ACTIVE",
+    employeeCount: 11,
+    cropCount: 4,
+    createdAt: "2021-07-15",
+    updatedAt: "2026-08-08",
+  },
+  {
+    farmId: "farm-003",
+    farmName: "East Ridge Farm",
+    location: "Koforidua, Eastern Region",
+    size: 35.2,
+    farmStatus: "SEASONAL",
+    employeeCount: 8,
+    cropCount: 2,
+    createdAt: "2023-01-20",
+    updatedAt: "2026-07-30",
+  },
+  {
+    farmId: "farm-004",
+    farmName: "Sunrise Agro Holdings",
+    location: "Cape Coast, Central Region",
+    size: 21.8,
+    farmStatus: "INACTIVE",
+    employeeCount: 5,
+    cropCount: 0,
+    createdAt: "2020-11-05",
+    updatedAt: "2026-06-01",
+  },
+];
+
+export const FARM_STATS: StatCardData[] = [
+  {
+    id: "total-farms",
+    title: "Total Farms",
+    value: 4,
+    subtitle: "Registered in the system",
+    icon: faTractor,
+    accentColor: "teal",
+    trend: "neutral",
+  },
+  {
+    id: "active-farms",
+    title: "Active Farms",
+    value: 2,
+    change: "+1",
+    trend: "up",
+    subtitle: "Currently operational",
+    icon: faMapLocationDot,
+    accentColor: "amber",
+  },
+  {
+    id: "total-employees",
+    title: "Farm Employees",
+    value: 38,
+    change: "+3",
+    trend: "up",
+    subtitle: "Across all farms",
+    icon: faUsers,
+    accentColor: "blue",
+  },
+  {
+    id: "total-area",
+    title: "Total Area",
+    value: "177.5 ha",
+    subtitle: "Combined farm size",
+    icon: faSeedling,
+    accentColor: "purple",
+    trend: "neutral",
+  },
+];

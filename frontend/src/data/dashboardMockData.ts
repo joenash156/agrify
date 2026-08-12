@@ -19,7 +19,7 @@ export const MOCK_USER: UserProfile = {
   lastName: "Adjei",
   email: "samuel.adjei@agrify.io",
   phone: "+233 20 000 0001",
-  role: "ADMIN",
+  role: "SALES_PERSON",
   farmName: "Green Valley Estate",
 };
 
@@ -197,21 +197,34 @@ export function getDashboardStats(role: UserProfile["role"]): StatCardData[] {
 
 // Chart data for admin/manager dashboard
 export const HARVEST_CHART_DATA = [
+  { month: "Jan", yield: 118 },
+  { month: "Feb", yield: 120 },
   { month: "Mar", yield: 210 },
   { month: "Apr", yield: 340 },
   { month: "May", yield: 290 },
   { month: "Jun", yield: 480 },
   { month: "Jul", yield: 390 },
   { month: "Aug", yield: 480 },
+  { month: "Sep", yield: 320 },
+  { month: "Oct", yield: 390 },
+  { month: "Nov", yield: 250 },
+  { month: "Dec", yield: 180 },
 ];
 
 export const SALES_CHART_DATA = [
+  { month: "Jan", revenue: 1400 },
+  { month: "Feb", revenue: 1220 },
   { month: "Mar", revenue: 12400 },
   { month: "Apr", revenue: 18200 },
   { month: "May", revenue: 15800 },
   { month: "Jun", revenue: 21400 },
   { month: "Jul", revenue: 19600 },
   { month: "Aug", revenue: 24800 },
+  { month: "Sep", revenue: 20900 },
+  { month: "Oct", revenue: 17400 },
+  { month: "Nov", revenue: 21900 },
+  { month: "Dec", revenue: 26400 },
+
 ];
 
 export const CROP_STATUS_DATA = [

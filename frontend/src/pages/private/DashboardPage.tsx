@@ -22,9 +22,6 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { StatCard } from "../../components/dashboard/StatCard";
-import { DashboardTopBar } from "../../components/layout/DashboardTopBar";
-import { Sidebar } from "../../components/layout/Sidebar";
-import { useSidebar } from "../../contexts/SidebarContext";
 import { formatGreeting } from "../../utils/greeting";
 import {
   MOCK_USER,
@@ -58,7 +55,6 @@ function HarvestUrgencyBadge({ days }: { days: number }) {
 export default function DashboardPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const { isCollapsed, isOpen, toggleCollapsed, toggleOpen, closeSidebar } = useSidebar();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const user = MOCK_USER;
@@ -78,224 +74,198 @@ export default function DashboardPage() {
   const chartText = isDark ? "#a1a1aa" : "#71717a";
 
   return (
-    <div className={`flex h-screen w-full overflow-hidden ${isDark ? "bg-zinc-950" : "bg-zinc-50"}`}>
-      {/* Sidebar */}
-      <Sidebar
-        role={user.role}
-        collapsed={isCollapsed}
-        onToggleCollapse={toggleCollapsed}
-        mobileOpen={isOpen}
-        onCloseMobile={closeSidebar}
-      />
+    <>
+      {/* ── Greeting banner ── */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className={`text-xl sm:text-2xl font-extrabold tracking-tight ${sectionTitle}`}>
+            {formatGreeting(user.firstName)}
+          </h2>
+          <p className={`text-xs sm:text-sm mt-0.5 font-medium ${subText}`}>
+            {isAdmin
+              ? `Here's what's happening across your ${user.farmName ?? "farms"} today.`
+              : "Here's your work summary for today."}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+            isDark
+              ? "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              : "border-zinc-200 text-zinc-700 hover:bg-zinc-100"
+          }`}
+        >
+          <FontAwesomeIcon
+            icon={faArrowRotateRight}
+            className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+          />
+          Refresh
+        </button>
+      </div>
 
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top Bar */}
-        <DashboardTopBar
-          user={user}
-          onOpenMobileSidebar={toggleOpen}
-          onRefresh={handleRefresh}
-          isRefreshing={isRefreshing}
-        />
+      {/* ── Stat Cards Grid ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {stats.map((stat) => (
+          <StatCard key={stat.id} {...stat} />
+        ))}
+      </div>
 
-        {/* Scrollable page body */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-
-          {/* ── Greeting banner ── */}
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <h2 className={`text-xl sm:text-2xl font-extrabold tracking-tight ${sectionTitle}`}>
-                {formatGreeting(user.firstName)} 
-              </h2>
-              <p className={`text-xs sm:text-sm mt-0.5 font-medium ${subText}`}>
-                {isAdmin
-                  ? `Here's what's happening across your ${user.farmName ?? "farms"} today.`
-                  : "Here's your work summary for today."}
-              </p>
+      {/* ── Admin Charts Section ── */}
+      {isAdmin && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Revenue Area Chart — 2/3 width */}
+          <div className={`lg:col-span-2 p-5 rounded-2xl border ${cardBg}`}>
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Monthly Revenue</h3>
+                <p className={`text-xs ${subText}`}>Last 6 months sales trend</p>
+              </div>
+              <span className={`text-[10px] font-bold px-2 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 ${isDark ? "text-teal-400" : "text-teal-600"}`}>
+                ₵ 24,800 this month
+              </span>
             </div>
-            <button
-              type="button"
-              onClick={handleRefresh}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
-                isDark
-                  ? "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-                  : "border-zinc-200 text-zinc-700 hover:bg-zinc-100"
-              }`}
-            >
-              <FontAwesomeIcon
-                icon={faArrowRotateRight}
-                className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`}
-              />
-              Refresh
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={SALES_CHART_DATA} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke={chartGrid} strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="month" tick={{ fill: chartText, fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: chartText, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₵${v / 1000}k`} />
+                <Tooltip
+                  contentStyle={{ background: isDark ? "#18181b" : "#fff", border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`, borderRadius: 12, fontSize: 11 }}
+                  formatter={(v) => [`₵ ${Number(v).toLocaleString()}`, "Revenue"]}
+                />
+                <Area type="monotone" dataKey="revenue" stroke="#14b8a6" strokeWidth={2.5} fill="url(#revenueGrad)" dot={{ fill: "#14b8a6", r: 3 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Crop Status Pie — 1/3 width */}
+          <div className={`p-5 rounded-2xl border ${cardBg}`}>
+            <div className="mb-4">
+              <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Crop Status</h3>
+              <p className={`text-xs ${subText}`}>Current cultivation breakdown</p>
+            </div>
+            <ResponsiveContainer width="100%" height={150}>
+              <PieChart>
+                <Pie
+                  data={CROP_STATUS_DATA}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={40}
+                  outerRadius={65}
+                  paddingAngle={3}
+                  dataKey="value"
+                >
+                  {CROP_STATUS_DATA.map((entry, i) => (
+                    <Cell key={i} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{ background: isDark ? "#18181b" : "#fff", border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`, borderRadius: 12, fontSize: 11 }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="space-y-1.5 mt-2">
+              {CROP_STATUS_DATA.map((d) => (
+                <div key={d.name} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FontAwesomeIcon icon={faCircle} className="w-2 h-2" style={{ color: d.color }} />
+                    <span className={`text-xs font-semibold ${subText}`}>{d.name}</span>
+                  </div>
+                  <span className={`text-xs font-bold ${sectionTitle}`}>{d.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Harvest Yield Bar Chart — full width */}
+          <div className={`lg:col-span-3 p-5 rounded-2xl border ${cardBg}`}>
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Harvest Yield (kg)</h3>
+                <p className={`text-xs ${subText}`}>Monthly total yield across all farms</p>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={HARVEST_CHART_DATA} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <CartesianGrid stroke={chartGrid} strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="month" tick={{ fill: chartText, fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: chartText, fontSize: 11 }} axisLine={false} tickLine={false} unit=" kg" />
+                <Tooltip
+                  contentStyle={{ background: isDark ? "#18181b" : "#fff", border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`, borderRadius: 12, fontSize: 11 }}
+                  formatter={(v) => [`${v} kg`, "Yield"]}
+                />
+                <Bar dataKey="yield" fill="#14b8a6" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bottom two-column section ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Recent Sales Table */}
+        <div className={`rounded-2xl border overflow-hidden ${cardBg}`}>
+          <div className={`flex items-center justify-between px-5 py-4 border-b ${isDark ? "border-zinc-800" : "border-zinc-200"}`}>
+            <div>
+              <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Recent Sales</h3>
+              <p className={`text-xs ${subText}`}>Last 5 orders</p>
+            </div>
+            <button className="text-[11px] font-bold text-teal-600 hover:text-teal-700 flex items-center gap-1">
+              View all <FontAwesomeIcon icon={faChevronRight} className="w-2.5 h-2.5" />
             </button>
           </div>
-
-          {/* ── Stat Cards Grid ── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {stats.map((stat) => (
-              <StatCard key={stat.id} {...stat} />
+          <div className={`divide-y ${isDark ? "divide-zinc-800" : "divide-zinc-100"}`}>
+            {RECENT_SALES.map((sale) => (
+              <div key={sale.id} className={`flex items-center justify-between px-5 py-3 gap-4 transition-colors ${isDark ? "hover:bg-zinc-800/50" : "hover:bg-zinc-100"}`}>
+                <div className="min-w-0">
+                  <p className={`text-xs font-bold truncate ${sectionTitle}`}>{sale.customer}</p>
+                  <p className={`text-[11px] ${subText}`}>{sale.id} · {sale.items} item{sale.items > 1 ? "s" : ""} · {sale.date}</p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className={`text-xs font-black ${sectionTitle}`}>{sale.amount}</span>
+                  <SaleStatusBadge status={sale.status} />
+                </div>
+              </div>
             ))}
           </div>
+        </div>
 
-          {/* ── Admin Charts Section ── */}
-          {isAdmin && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* Revenue Area Chart — 2/3 width */}
-              <div className={`lg:col-span-2 p-5 rounded-2xl border ${cardBg}`}>
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Monthly Revenue</h3>
-                    <p className={`text-xs ${subText}`}>Last 6 months sales trend</p>
-                  </div>
-                  <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20">
-                    ₵ 24,800 this month
-                  </span>
-                </div>
-                <ResponsiveContainer width="100%" height={200}>
-                  <AreaChart data={SALES_CHART_DATA} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.25} />
-                        <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid stroke={chartGrid} strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fill: chartText, fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: chartText, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₵${v / 1000}k`} />
-                    <Tooltip
-                      contentStyle={{ background: isDark ? "#18181b" : "#fff", border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`, borderRadius: 12, fontSize: 11 }}
-                      formatter={(v) => [`₵ ${Number(v).toLocaleString()}`, "Revenue"]}
-                    />
-                    <Area type="monotone" dataKey="revenue" stroke="#14b8a6" strokeWidth={2.5} fill="url(#revenueGrad)" dot={{ fill: "#14b8a6", r: 3 }} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Crop Status Pie — 1/3 width */}
-              <div className={`p-5 rounded-2xl border ${cardBg}`}>
-                <div className="mb-4">
-                  <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Crop Status</h3>
-                  <p className={`text-xs ${subText}`}>Current cultivation breakdown</p>
-                </div>
-                <ResponsiveContainer width="100%" height={150}>
-                  <PieChart>
-                    <Pie
-                      data={CROP_STATUS_DATA}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={40}
-                      outerRadius={65}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
-                      {CROP_STATUS_DATA.map((entry, i) => (
-                        <Cell key={i} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{ background: isDark ? "#18181b" : "#fff", border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`, borderRadius: 12, fontSize: 11 }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="space-y-1.5 mt-2">
-                  {CROP_STATUS_DATA.map((d) => (
-                    <div key={d.name} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <FontAwesomeIcon icon={faCircle} className="w-2 h-2" style={{ color: d.color }} />
-                        <span className={`text-xs font-semibold ${subText}`}>{d.name}</span>
-                      </div>
-                      <span className={`text-xs font-bold ${sectionTitle}`}>{d.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Harvest Yield Bar Chart — full width */}
-              <div className={`lg:col-span-3 p-5 rounded-2xl border ${cardBg}`}>
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Harvest Yield (kg)</h3>
-                    <p className={`text-xs ${subText}`}>Monthly total yield across all farms</p>
-                  </div>
-                </div>
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={HARVEST_CHART_DATA} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                    <CartesianGrid stroke={chartGrid} strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fill: chartText, fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: chartText, fontSize: 11 }} axisLine={false} tickLine={false} unit=" kg" />
-                    <Tooltip
-                      contentStyle={{ background: isDark ? "#18181b" : "#fff", border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`, borderRadius: 12, fontSize: 11 }}
-                      formatter={(v) => [`${v} kg`, "Yield"]}
-                    />
-                    <Bar dataKey="yield" fill="#14b8a6" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+        {/* Upcoming Harvests */}
+        <div className={`rounded-2xl border overflow-hidden ${cardBg}`}>
+          <div className={`flex items-center justify-between px-5 py-4 border-b ${isDark ? "border-zinc-800" : "border-zinc-200"}`}>
+            <div>
+              <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Upcoming Harvests</h3>
+              <p className={`text-xs ${subText}`}>Crops due for harvest soon</p>
             </div>
-          )}
-
-          {/* ── Bottom two-column section ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-            {/* Recent Sales Table */}
-            <div className={`rounded-2xl border overflow-hidden ${cardBg}`}>
-              <div className={`flex items-center justify-between px-5 py-4 border-b  ${isDark ? "border-zinc-800" : "border-zinc-200"}`}>
-                <div>
-                  <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Recent Sales</h3>
-                  <p className={`text-xs ${subText}`}>Last 5 orders</p>
-                </div>
-                <button className="text-[11px] font-bold text-teal-600 hover:text-teal-700 flex items-center gap-1">
-                  View all <FontAwesomeIcon icon={faChevronRight} className="w-2.5 h-2.5" />
-                </button>
-              </div>
-              <div className={`divide-y ${isDark ? "divide-zinc-800" : "divide-zinc-100"}`}>
-                {RECENT_SALES.map((sale) => (
-                  <div key={sale.id} className={`flex items-center justify-between px-5 py-3 gap-4 transition-colors ${isDark ? "hover:bg-zinc-800/50" : "hover:bg-zinc-100"}`}>
-                    <div className="min-w-0">
-                      <p className={`text-xs font-bold truncate ${sectionTitle}`}>{sale.customer}</p>
-                      <p className={`text-[11px] ${subText}`}>{sale.id} · {sale.items} item{sale.items > 1 ? "s" : ""} · {sale.date}</p>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className={`text-xs font-black ${sectionTitle}`}>{sale.amount}</span>
-                      <SaleStatusBadge status={sale.status} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Upcoming Harvests */}
-            <div className={`rounded-2xl border overflow-hidden ${cardBg}`}>
-              <div className={`flex items-center justify-between px-5 py-4 border-b ${isDark ? "border-zinc-800" : "border-zinc-200"}`}>
-                <div>
-                  <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Upcoming Harvests</h3>
-                  <p className={`text-xs ${subText}`}>Crops due for harvest soon</p>
-                </div>
-                <button className="text-[11px] font-bold text-teal-600 hover:text-teal-700 flex items-center gap-1">
-                  View all <FontAwesomeIcon icon={faChevronRight} className="w-2.5 h-2.5" />
-                </button>
-              </div>
-              <div className={`divide-y ${isDark ? "divide-zinc-800" : "divide-zinc-100"}`}>
-                {UPCOMING_HARVESTS.map((h, i) => (
-                  <div key={i} className={`flex items-center justify-between px-5 py-3 gap-4 ${isDark ? "hover:bg-zinc-800/50" : "hover:bg-zinc-100"} transition-colors`}>
-                    <div className="flex items-center gap-3 min-w-0">
-                      {h.daysLeft <= 5 && (
-                        <FontAwesomeIcon icon={faWarning} className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                      )}
-                      <div className="min-w-0">
-                        <p className={`text-xs font-bold truncate ${sectionTitle}`}>{h.crop} <span className="font-normal text-zinc-400">({h.variety})</span></p>
-                        <p className={`text-[11px] ${subText}`}>{h.farm} · {h.quantity} est.</p>
-                      </div>
-                    </div>
-                    <HarvestUrgencyBadge days={h.daysLeft} />
-                  </div>
-                ))}
-              </div>
-            </div>
+            <button className="text-[11px] font-bold text-teal-600 hover:text-teal-700 flex items-center gap-1">
+              View all <FontAwesomeIcon icon={faChevronRight} className="w-2.5 h-2.5" />
+            </button>
           </div>
-
-        </main>
+          <div className={`divide-y ${isDark ? "divide-zinc-800" : "divide-zinc-100"}`}>
+            {UPCOMING_HARVESTS.map((h, i) => (
+              <div key={i} className={`flex items-center justify-between px-5 py-3 gap-4 ${isDark ? "hover:bg-zinc-800/50" : "hover:bg-zinc-100"} transition-colors`}>
+                <div className="flex items-center gap-3 min-w-0">
+                  {h.daysLeft <= 5 && (
+                    <FontAwesomeIcon icon={faWarning} className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <p className={`text-xs font-bold truncate ${sectionTitle}`}>{h.crop} <span className="font-normal text-zinc-400">({h.variety})</span></p>
+                    <p className={`text-[11px] ${subText}`}>{h.farm} · {h.quantity} est.</p>
+                  </div>
+                </div>
+                <HarvestUrgencyBadge days={h.daysLeft} />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

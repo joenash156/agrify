@@ -188,7 +188,7 @@ export function Sidebar({
 
         <SidebarNav groups={groups} collapsed={collapsed} isDark={isDark} />
 
-        <div className="p-3 border-t border-zinc-200/60 dark:border-zinc-800/60">
+        <div className={`p-3 border-t ${isDark ? "border-zinc-800/60" : "border-zinc-200/60"}`}>
           <button
             type="button"
             onClick={onToggleCollapse}

@@ -7,6 +7,10 @@
 
 @import "tailwindcss";
 
+/* Tailwind v4 defaults `dark:` to prefers-color-scheme — this rebinds it to
+   the manually-toggled `.dark` class on <html> so ThemeContext controls it. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Custom Font Utilities */
 .font-poppins {
   font-family: 'Poppins', sans-serif;
