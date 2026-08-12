@@ -2,7 +2,7 @@ import { Outlet, Navigate } from "react-router-dom";
 import { SidebarProvider } from "../contexts/SidebarContext";
 
 export function PrivateAppLayout() {
-  // Simple check for demo token
+  // Simple check for demo token — replace with proper auth context on backend integration
   const isAuthenticated = Boolean(localStorage.getItem("agrify_auth_token"));
 
   if (!isAuthenticated) {
@@ -11,10 +11,10 @@ export function PrivateAppLayout() {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen w-full bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white font-sans flex">
-        <main className="flex-1 w-full overflow-y-auto">
-          <Outlet />
-        </main>
+      <div className="font-kumbh">
+        {/* The dashboard page itself controls layout (sidebar + topbar + content)
+          so this wrapper just provides context and the router outlet */}
+        <Outlet />
       </div>
     </SidebarProvider>
   );
