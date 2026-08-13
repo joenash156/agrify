@@ -7,9 +7,9 @@ import {
   faChevronDown,
   faUserGear,
   faRightFromBracket,
-  faArrowRotateRight,
 } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
+import { useNotifications } from "../../contexts/NotificationsContext";
 import { ThemeSwitcher } from "../common/ThemeSwitcher";
 import { formatGreeting, formatFormattedDate } from "../../utils/greeting";
 import type { UserProfile } from "../../types/user";
@@ -17,8 +17,6 @@ import type { UserProfile } from "../../types/user";
 interface DashboardTopBarProps {
   user?: UserProfile;
   onOpenMobileSidebar: () => void;
-  onRefresh?: () => void;
-  isRefreshing?: boolean;
 }
 
 function formatRouteTitle(pathname: string): string {
@@ -42,16 +40,12 @@ function UserAvatar({ name }: { name?: string }) {
   );
 }
 
-export function DashboardTopBar({
-  user,
-  onOpenMobileSidebar,
-  onRefresh,
-  isRefreshing = false,
-}: DashboardTopBarProps) {
+export function DashboardTopBar({ user, onOpenMobileSidebar }: DashboardTopBarProps) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const location = useLocation();
   const navigate = useNavigate();
+  const { unreadCount } = useNotifications();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -114,34 +108,24 @@ export function DashboardTopBar({
 
         {/* Right: Actions */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Refresh button */}
-          {/* {onRefresh && (
-            <button
-              type="button"
-              onClick={onRefresh}
-              aria-label="Refresh dashboard data"
-              title="Refresh"
-              className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${iconBtn}`}
-            >
-              <FontAwesomeIcon
-                icon={faArrowRotateRight}
-                className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
-              />
-            </button>
-          )} */}
-
-          {/* Notifications (placeholder) */}
+          {/* Notifications */}
           <button
             type="button"
-            aria-label="Notifications"
+            onClick={() => navigate("/notifications")}
+            aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+            title="Notifications"
             className={`relative w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${iconBtn}`}
           >
             <FontAwesomeIcon icon={faBell} className="w-4 h-4" />
-            <span
-              className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-teal-500 ring-2 ${
-                isDark ? "ring-zinc-950" : "ring-white"
-              }`}
-            />
+            {unreadCount > 0 && (
+              <span
+                className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-teal-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ${
+                  isDark ? "ring-zinc-950" : "ring-white"
+                }`}
+              >
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
           </button>
 
           {/* User menu */}
@@ -215,7 +199,10 @@ export function DashboardTopBar({
                 <div className="py-1">
                   <button
                     type="button"
-                    onClick={() => setMenuOpen(false)}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      navigate("/settings");
+                    }}
                     className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-xs font-bold transition-colors ${
                       isDark
                         ? "text-zinc-300 hover:bg-zinc-800"

@@ -1,5 +1,6 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faPlus } from "@fortawesome/free-solid-svg-icons";
+import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 import { useTheme } from "../../contexts/ThemeContext";
 
 interface PageHeaderProps {
@@ -9,9 +10,18 @@ interface PageHeaderProps {
   onAction?: () => void;
   /** Hide the action button entirely — e.g. for view-only roles. */
   showAction?: boolean;
+  /** Icon for the action button — defaults to a "+" for create actions. */
+  actionIcon?: IconDefinition;
 }
 
-export function PageHeader({ title, subtitle, actionLabel, onAction, showAction = true }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  subtitle,
+  actionLabel,
+  onAction,
+  showAction = true,
+  actionIcon = faPlus,
+}: PageHeaderProps) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
@@ -30,7 +40,7 @@ export function PageHeader({ title, subtitle, actionLabel, onAction, showAction 
           onClick={onAction}
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 active:scale-[0.98] transition-all shadow-sm"
         >
-          <FontAwesomeIcon icon={faPlus} className="w-3.5 h-3.5" />
+          <FontAwesomeIcon icon={actionIcon} className="w-3.5 h-3.5" />
           {actionLabel}
         </button>
       )}

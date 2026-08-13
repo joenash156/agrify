@@ -10,17 +10,19 @@ import { EntityCard } from "../../components/common/EntityCard";
 import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
-import { canManageRecords } from "../../utils/permissions";
+import { canManageOwnedRecord, canCreateSales } from "../../utils/permissions";
 import { MOCK_USER } from "../../data/dashboardMockData";
 import { MOCK_SALES, SALES_STATS } from "../../data/salesMockData";
 import type { Sale } from "../../types/sale";
 
 const STATUS_FILTERS: Array<Sale["saleStatus"] | "ALL"> = ["ALL", "PAID", "PENDING", "OVERDUE", "CANCELLED"];
 
+const CURRENT_USER_NAME = `${MOCK_USER.firstName} ${MOCK_USER.lastName}`;
+
 export default function SalesPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const canManage = canManageRecords(MOCK_USER.role);
+  const canCreate = canCreateSales(MOCK_USER.role);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Sale["saleStatus"] | "ALL">("ALL");
 
@@ -44,7 +46,7 @@ export default function SalesPage() {
         title="Sales & Orders"
         subtitle="Review customer orders, order value, and fulfillment status."
         actionLabel="New Sale"
-        showAction={canManage}
+        showAction={canCreate}
         onAction={() => alert("Creating a sale will be available once the backend is connected.")}
       />
 
@@ -110,6 +112,11 @@ export default function SalesPage() {
                     <div className={`flex items-center gap-1.5 text-xs font-medium ${subText}`}>
                       <FontAwesomeIcon icon={faUser} className="w-3 h-3" />
                       {sale.soldBy}
+                      {sale.soldBy === CURRENT_USER_NAME && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400">
+                          You
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-5 py-3.5">
@@ -123,7 +130,10 @@ export default function SalesPage() {
                     <StatusBadge status={sale.saleStatus} variant="sale" />
                   </td>
                   <td className="px-5 py-3.5">
-                    <RowActions canManage={canManage} entityLabel="sale" />
+                    <RowActions
+                      canManage={canManageOwnedRecord(MOCK_USER.role, sale.soldBy === CURRENT_USER_NAME)}
+                      entityLabel="sale"
+                    />
                   </td>
                 </tr>
               ))}
@@ -142,12 +152,12 @@ export default function SalesPage() {
             title={sale.customerName}
             subtitle={`${sale.saleId} · ${sale.itemCount} item${sale.itemCount > 1 ? "s" : ""}`}
             badge={<StatusBadge status={sale.saleStatus} variant="sale" />}
-            canManage={canManage}
+            canManage={canManageOwnedRecord(MOCK_USER.role, sale.soldBy === CURRENT_USER_NAME)}
             entityLabel="sale"
             fields={[
               { label: "Date", value: formatDate(sale.saleDate) },
               { label: "Total", value: `₵ ${sale.total.toLocaleString()}` },
-              { label: "Sold By", value: sale.soldBy },
+              { label: "Sold By", value: sale.soldBy === CURRENT_USER_NAME ? `${sale.soldBy} (You)` : sale.soldBy },
             ]}
           />
         ))}

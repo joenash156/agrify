@@ -1,4 +1,4 @@
-import type { UserProfile } from "../types/user";
+import type { UserProfile, UserAccount } from "../types/user";
 import type { StatCardData } from "../types/dashboard";
 import {
   faTractor,
@@ -19,8 +19,16 @@ export const MOCK_USER: UserProfile = {
   lastName: "Adjei",
   email: "samuel.adjei@agrify.io",
   phone: "+233 20 000 0001",
-  role: "SALES_PERSON",
+  role: "ADMIN",
   farmName: "Green Valley Estate",
+};
+
+// Demo account record for the same user — mirrors USER_ACCOUNT in the ERD
+export const MOCK_USER_ACCOUNT: UserAccount = {
+  accountId: "acc-0001",
+  userId: MOCK_USER.id,
+  username: "samuel.adjei",
+  accountStatus: "ACTIVE",
 };
 
 // ── Stat cards: Admin sees everything, workers see their scope ──
@@ -246,4 +254,32 @@ export const UPCOMING_HARVESTS = [
   { crop: "Maize",       variety: "Yellow Dent",farm: "North Fields",  daysLeft: 8,  quantity: "240 kg" },
   { crop: "Cabbage",     variety: "Savoy",      farm: "Green Valley",  daysLeft: 14, quantity: "80 kg"  },
   { crop: "Sweet Pepper",variety: "Bell",       farm: "East Ridge",    daysLeft: 21, quantity: "60 kg"  },
+];
+
+// ── Chart data for sales person dashboard ──
+export const MY_SALES_TREND = [
+  { month: "Mar", revenue: 3200 },
+  { month: "Apr", revenue: 4100 },
+  { month: "May", revenue: 3800 },
+  { month: "Jun", revenue: 5200 },
+  { month: "Jul", revenue: 4700 },
+  { month: "Aug", revenue: 5400 },
+];
+
+export const MY_ORDER_STATUS_DATA = [
+  { name: "Paid", value: 12, color: "#14b8a6" },
+  { name: "Pending", value: 3, color: "#f59e0b" },
+  { name: "Overdue", value: 1, color: "#ef4444" },
+];
+
+// ── Chart data for worker dashboard ──
+export const MY_ATTENDANCE_BREAKDOWN = [
+  { status: "Present", count: 21 },
+  { status: "Late", count: 1 },
+  { status: "Absent", count: 1 },
+];
+
+export const MY_CROPS_STATUS_DATA = [
+  { name: "Growing", value: 2, color: "#14b8a6" },
+  { name: "Ready", value: 1, color: "#f59e0b" },
 ];

@@ -1,0 +1,68 @@
+import type { AppNotification } from "../types/notification";
+
+export const MOCK_NOTIFICATIONS: AppNotification[] = [
+  {
+    id: "ntf-001",
+    category: "disease",
+    title: "Critical disease detected",
+    message: "Groundnut Rosette flagged as CRITICAL severity at North Fields Agriculture. Field quarantined pending review.",
+    createdAt: "2026-08-12T08:15:00",
+    read: false,
+  },
+  {
+    id: "ntf-002",
+    category: "sale",
+    title: "New order placed",
+    message: "Kofi Mensah placed order SL-001 for ₵ 1,240 — 3 items.",
+    createdAt: "2026-08-12T07:40:00",
+    read: false,
+  },
+  {
+    id: "ntf-003",
+    category: "payment",
+    title: "Payment overdue",
+    message: "Payment for order SL-004 (Abena Frimpong, ₵ 840) is overdue.",
+    createdAt: "2026-08-11T16:20:00",
+    read: false,
+  },
+  {
+    id: "ntf-004",
+    category: "equipment",
+    title: "Equipment needs maintenance",
+    message: "Irrigation Pump Set at North Fields Agriculture flagged for scheduled maintenance.",
+    createdAt: "2026-08-11T11:05:00",
+    read: true,
+  },
+  {
+    id: "ntf-005",
+    category: "harvest",
+    title: "Harvest ready for storage",
+    message: "420 kg of Tomatoes harvested at Green Valley Estate — awaiting inventory intake.",
+    createdAt: "2026-08-10T14:30:00",
+    read: true,
+  },
+  {
+    id: "ntf-006",
+    category: "attendance",
+    title: "Unreported absence",
+    message: "Kojo Antwi was marked absent today with no leave request on file.",
+    createdAt: "2026-08-12T09:00:00",
+    read: false,
+  },
+  {
+    id: "ntf-007",
+    category: "system",
+    title: "Weekly summary ready",
+    message: "Your farm performance summary for the week of Aug 3–9 is ready to view.",
+    createdAt: "2026-08-09T09:00:00",
+    read: true,
+  },
+  {
+    id: "ntf-008",
+    category: "harvest",
+    title: "Upcoming harvest reminder",
+    message: "Tomatoes at Green Valley Estate are due for harvest in 3 days.",
+    createdAt: "2026-08-09T07:00:00",
+    read: true,
+  },
+];

@@ -15,6 +15,9 @@ import SalesPage from "./pages/private/SalesPage";
 import PaymentsPage from "./pages/private/PaymentsPage";
 import EmployeesPage from "./pages/private/EmployeesPage";
 import AttendancePage from "./pages/private/AttendancePage";
+import AnalyticsPage from "./pages/private/AnalyticsPage";
+import NotificationsPage from "./pages/private/NotificationsPage";
+import SettingsPage from "./pages/private/SettingsPage";
 
 export function App() {
   return (
@@ -42,6 +45,9 @@ export function App() {
             <Route path="/payments" element={<PaymentsPage />} />
             <Route path="/employees" element={<EmployeesPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Route>
 
           {/* Catch-all redirect */}

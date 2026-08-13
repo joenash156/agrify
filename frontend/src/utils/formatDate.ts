@@ -8,3 +8,21 @@ export function formatDate(dateString: string): string {
     day: "numeric",
   });
 }
+
+/**
+ * Formats a timestamp relative to now (e.g. "5m ago", "3h ago"), falling
+ * back to a short date once it's more than a week old.
+ */
+export function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString);
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return formatDate(dateString);
+}

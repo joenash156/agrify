@@ -31,6 +31,10 @@ import {
   CROP_STATUS_DATA,
   RECENT_SALES,
   UPCOMING_HARVESTS,
+  MY_SALES_TREND,
+  MY_ORDER_STATUS_DATA,
+  MY_ATTENDANCE_BREAKDOWN,
+  MY_CROPS_STATUS_DATA,
 } from "../../data/dashboardMockData";
 
 function SaleStatusBadge({ status }: { status: string }) {
@@ -111,7 +115,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* ── Admin Charts Section ── */}
+      {/* ── Charts Section — tailored per role ── */}
       {isAdmin && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Revenue Area Chart — 2/3 width */}
@@ -204,6 +208,122 @@ export default function DashboardPage() {
                 <Bar dataKey="yield" fill="#14b8a6" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {user.role === "SALES_PERSON" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* My Sales Trend — 2/3 width */}
+          <div className={`lg:col-span-2 p-5 rounded-2xl border ${cardBg}`}>
+            <div className="mb-4">
+              <h3 className={`text-sm font-extrabold ${sectionTitle}`}>My Sales Trend</h3>
+              <p className={`text-xs ${subText}`}>Last 6 months of your closed orders</p>
+            </div>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={MY_SALES_TREND} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="mySalesGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke={chartGrid} strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="month" tick={{ fill: chartText, fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: chartText, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₵${v / 1000}k`} />
+                <Tooltip
+                  contentStyle={{ background: isDark ? "#18181b" : "#fff", border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`, borderRadius: 12, fontSize: 11 }}
+                  formatter={(v) => [`₵ ${Number(v).toLocaleString()}`, "My Revenue"]}
+                />
+                <Area type="monotone" dataKey="revenue" stroke="#14b8a6" strokeWidth={2.5} fill="url(#mySalesGrad)" dot={{ fill: "#14b8a6", r: 3 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* My Order Status Pie — 1/3 width */}
+          <div className={`p-5 rounded-2xl border ${cardBg}`}>
+            <div className="mb-4">
+              <h3 className={`text-sm font-extrabold ${sectionTitle}`}>My Order Status</h3>
+              <p className={`text-xs ${subText}`}>Breakdown of your orders</p>
+            </div>
+            <ResponsiveContainer width="100%" height={150}>
+              <PieChart>
+                <Pie data={MY_ORDER_STATUS_DATA} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={3} dataKey="value">
+                  {MY_ORDER_STATUS_DATA.map((entry, i) => (
+                    <Cell key={i} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{ background: isDark ? "#18181b" : "#fff", border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`, borderRadius: 12, fontSize: 11 }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="space-y-1.5 mt-2">
+              {MY_ORDER_STATUS_DATA.map((d) => (
+                <div key={d.name} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FontAwesomeIcon icon={faCircle} className="w-2 h-2" style={{ color: d.color }} />
+                    <span className={`text-xs font-semibold ${subText}`}>{d.name}</span>
+                  </div>
+                  <span className={`text-xs font-bold ${sectionTitle}`}>{d.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {user.role === "WORKER" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* My Attendance Bar Chart */}
+          <div className={`p-5 rounded-2xl border ${cardBg}`}>
+            <div className="mb-4">
+              <h3 className={`text-sm font-extrabold ${sectionTitle}`}>My Attendance</h3>
+              <p className={`text-xs ${subText}`}>This month's attendance record</p>
+            </div>
+            <ResponsiveContainer width="100%" height={170}>
+              <BarChart data={MY_ATTENDANCE_BREAKDOWN} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <CartesianGrid stroke={chartGrid} strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="status" tick={{ fill: chartText, fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: chartText, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ background: isDark ? "#18181b" : "#fff", border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`, borderRadius: 12, fontSize: 11 }}
+                  formatter={(v) => [`${v} day${Number(v) === 1 ? "" : "s"}`, "Days"]}
+                />
+                <Bar dataKey="count" fill="#14b8a6" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* My Crops Status Pie */}
+          <div className={`p-5 rounded-2xl border ${cardBg}`}>
+            <div className="mb-4">
+              <h3 className={`text-sm font-extrabold ${sectionTitle}`}>My Assigned Crops</h3>
+              <p className={`text-xs ${subText}`}>Status of crops assigned to you</p>
+            </div>
+            <ResponsiveContainer width="100%" height={150}>
+              <PieChart>
+                <Pie data={MY_CROPS_STATUS_DATA} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={3} dataKey="value">
+                  {MY_CROPS_STATUS_DATA.map((entry, i) => (
+                    <Cell key={i} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{ background: isDark ? "#18181b" : "#fff", border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`, borderRadius: 12, fontSize: 11 }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="space-y-1.5 mt-2">
+              {MY_CROPS_STATUS_DATA.map((d) => (
+                <div key={d.name} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FontAwesomeIcon icon={faCircle} className="w-2 h-2" style={{ color: d.color }} />
+                    <span className={`text-xs font-semibold ${subText}`}>{d.name}</span>
+                  </div>
+                  <span className={`text-xs font-bold ${sectionTitle}`}>{d.value}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

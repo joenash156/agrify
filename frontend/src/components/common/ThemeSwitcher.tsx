@@ -26,7 +26,7 @@ export function ThemeSwitcher() {
 
   return (
     <div
-      className={`grid grid-cols-3 gap-1 p-1 rounded-xl border ${
+      className={`grid grid-cols-3 gap-1 p-0.5 rounded-2xl border ${
         isDark ? "bg-zinc-900 border-zinc-700/80" : "bg-zinc-100 border-zinc-200"
       }`}
     >
@@ -37,7 +37,7 @@ export function ThemeSwitcher() {
             key={opt.id}
             type="button"
             onClick={() => setTheme(opt.id)}
-            className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all duration-200 ${
+            className={`flex items-center justify-center gap-0.5 py-1 px-2 rounded-xl text-xs font-semibold transition-all duration-200 ${
               isActive
                 ? isDark
                   ? "bg-zinc-800 text-white shadow-xs border border-zinc-700"
@@ -48,7 +48,7 @@ export function ThemeSwitcher() {
             }`}
           >
             {opt.icon}
-            <span className="text-[11px]">{opt.label}</span>
+            <span className="text-[10px]">{opt.label}</span>
           </button>
         );
       })}

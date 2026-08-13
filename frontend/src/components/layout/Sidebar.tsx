@@ -39,15 +39,15 @@ function Brand({ collapsed, isDark }: { collapsed: boolean; isDark: boolean }) {
       </div>
       {!collapsed && (
         <div className="flex flex-col">
+          <span className="text-lg font-black tracking-tight whitespace-nowrap text-white">
+            Agrify
+            <span className="text-teal-400 ml-0.5">.</span>
+          </span>
           <span
-            className={`text-lg font-black tracking-tight whitespace-nowrap ${
-              isDark ? "text-white" : "text-zinc-900"
+            className={`text-[10px] font-bold uppercase tracking-widest -mt-1 ${
+              isDark ? "text-zinc-500" : "text-teal-100/40"
             }`}
           >
-            Agrify
-            <span className="text-teal-600 ml-0.5">.</span>
-          </span>
-          <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest -mt-1">
             Enterprise Farm
           </span>
         </div>
@@ -77,7 +77,7 @@ function SidebarNav({
           {!collapsed && (
             <p
               className={`px-3 pb-2 text-[10px] font-extrabold uppercase tracking-widest ${
-                isDark ? "text-zinc-500" : "text-zinc-400"
+                isDark ? "text-zinc-500" : "text-teal-100/60"
               }`}
             >
               {group.label}
@@ -98,16 +98,16 @@ function SidebarNav({
                     active
                       ? isDark
                         ? "bg-teal-500/15 text-teal-400 font-extrabold shadow-xs"
-                        : "bg-teal-50 text-teal-700 font-extrabold shadow-xs"
+                        : "bg-white/15 text-white font-extrabold shadow-xs backdrop-blur-xs"
                       : isDark
                       ? "text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-100"
-                      : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
+                      : "text-teal-100/80 hover:bg-white/10 hover:text-white",
                   ].join(" ")}
                 >
                   {active && (
                     <span
                       className={`absolute left-0 top-2 bottom-2 w-1 rounded-r-full ${
-                        isDark ? "bg-teal-400" : "bg-teal-600"
+                        isDark ? "bg-teal-400" : "bg-teal-300"
                       }`}
                     />
                   )}
@@ -117,10 +117,10 @@ function SidebarNav({
                       active
                         ? isDark
                           ? "text-teal-400"
-                          : "text-teal-600"
+                          : "text-white"
                         : isDark
                         ? "text-zinc-500"
-                        : "text-zinc-400"
+                        : "text-teal-200/70"
                     }`}
                   />
                   {!collapsed && (
@@ -154,10 +154,28 @@ export function Sidebar({
   const isDark = theme === "dark";
   const groups = getNavGroups(role);
 
-  // Smooth diagonal gradient styling
+  // Diagonal gradient styling — deep teal in light mode, dark zinc depth in dark mode.
+  // Both are genuinely dark surfaces, so foreground colors below are tuned for a dark
+  // background in either case rather than flipping to light-on-white text.
   const sidebarBg = isDark
-    ? "bg-gradient-to-b from-zinc-950 via-zinc-900 to-zinc-950 border-zinc-800/80"
-    : "bg-gradient-to-b from-white via-zinc-50 to-teal-50/30 border-zinc-200/80";
+    ? "bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-950 border-zinc-800/80"
+    : "bg-gradient-to-br from-teal-900 via-teal-800 to-teal-900 border-teal-950/60";
+
+  const rolePanel = isDark
+    ? "border-teal-500/20 bg-teal-500/10"
+    : "border-white/15 bg-white/10";
+  const shieldIcon = isDark ? "text-teal-500" : "text-teal-200";
+  const roleText = isDark ? "text-teal-400" : "text-teal-100";
+  const roleSubText = isDark ? "text-zinc-400" : "text-teal-200/70";
+
+  const collapseBorder = isDark ? "border-zinc-800/60" : "border-white/10";
+  const collapseBtn = isDark
+    ? "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+    : "text-teal-100/80 hover:bg-white/10 hover:text-white";
+
+  const mobileCloseBtn = isDark
+    ? "text-zinc-400 hover:bg-zinc-800"
+    : "text-teal-100/80 hover:bg-white/10";
 
   return (
     <>
@@ -170,16 +188,16 @@ export function Sidebar({
         <Brand collapsed={collapsed} isDark={isDark} />
 
         {!collapsed && (
-          <div className="mx-3 my-2 p-3.5 rounded-2xl border border-teal-500/20 bg-teal-500/10 backdrop-blur-xs flex items-center gap-3">
+          <div className={`mx-3 my-2 p-3.5 rounded-2xl border backdrop-blur-xs flex items-center gap-3 ${rolePanel}`}>
             <FontAwesomeIcon
               icon={faShieldHalved}
-              className="w-4 h-4 text-teal-500 shrink-0"
+              className={`w-4 h-4 shrink-0 ${shieldIcon}`}
             />
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-bold text-teal-600 dark:text-teal-400 truncate">
+              <p className={`text-[11px] font-bold truncate ${roleText}`}>
                 Role: {role}
               </p>
-              <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
+              <p className={`text-[10px] truncate ${roleSubText}`}>
                 Farm System Access
               </p>
             </div>
@@ -188,16 +206,12 @@ export function Sidebar({
 
         <SidebarNav groups={groups} collapsed={collapsed} isDark={isDark} />
 
-        <div className={`p-3 border-t ${isDark ? "border-zinc-800/60" : "border-zinc-200/60"}`}>
+        <div className={`p-3 border-t ${collapseBorder}`}>
           <button
             type="button"
             onClick={onToggleCollapse}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className={`flex items-center gap-2 w-full h-10 rounded-xl justify-center transition-colors duration-150 text-xs font-bold ${
-              isDark
-                ? "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-            }`}
+            className={`flex items-center gap-2 w-full h-10 rounded-xl justify-center transition-colors duration-150 text-xs font-bold ${collapseBtn}`}
           >
             <FontAwesomeIcon
               icon={collapsed ? faAnglesRight : faAnglesLeft}
@@ -239,11 +253,7 @@ export function Sidebar({
                   type="button"
                   onClick={onCloseMobile}
                   aria-label="Close menu"
-                  className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${
-                    isDark
-                      ? "text-zinc-400 hover:bg-zinc-800"
-                      : "text-zinc-600 hover:bg-zinc-100"
-                  }`}
+                  className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${mobileCloseBtn}`}
                 >
                   <FontAwesomeIcon icon={faXmark} className="w-4 h-4" />
                 </button>

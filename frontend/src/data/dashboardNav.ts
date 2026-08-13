@@ -1,5 +1,6 @@
 import {
   faChartPie,
+  faChartLine,
   faTractor,
   faSeedling,
   faBug,
@@ -24,6 +25,12 @@ export function getNavGroups(role: UserRole = "ADMIN"): NavGroup[] {
           label: "Dashboard",
           href: "/dashboard",
           icon: faChartPie,
+        },
+        {
+          label: "Analytics",
+          href: "/analytics",
+          icon: faChartLine,
+          roles: ["ADMIN", "FARM_MANAGER"],
         },
       ],
     },

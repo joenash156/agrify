@@ -1,5 +1,6 @@
 import { Outlet, Navigate } from "react-router-dom";
 import { SidebarProvider, useSidebar } from "../contexts/SidebarContext";
+import { NotificationsProvider } from "../contexts/NotificationsContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { Sidebar } from "../components/layout/Sidebar";
 import { DashboardTopBar } from "../components/layout/DashboardTopBar";
@@ -44,7 +45,9 @@ export function PrivateAppLayout() {
 
   return (
     <SidebarProvider>
-      <PrivateShell />
+      <NotificationsProvider>
+        <PrivateShell />
+      </NotificationsProvider>
     </SidebarProvider>
   );
 }
