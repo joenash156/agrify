@@ -11,6 +11,8 @@ public class UserAccount {
     private String passwordHash;
     private String accountStatus;
     private String role;
+    private String refreshTokenHash;
+    private LocalDateTime refreshTokenExpiresAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -28,6 +30,10 @@ public class UserAccount {
     public void setAccountStatus(String accountStatus) { this.accountStatus = accountStatus; }
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
+    public String getRefreshTokenHash() { return refreshTokenHash; }
+    public void setRefreshTokenHash(String refreshTokenHash) { this.refreshTokenHash = refreshTokenHash; }
+    public LocalDateTime getRefreshTokenExpiresAt() { return refreshTokenExpiresAt; }
+    public void setRefreshTokenExpiresAt(LocalDateTime refreshTokenExpiresAt) { this.refreshTokenExpiresAt = refreshTokenExpiresAt; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

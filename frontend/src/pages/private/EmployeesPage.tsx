@@ -11,7 +11,7 @@ import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
-import { MOCK_USER } from "../../data/dashboardMockData";
+import { useCurrentUser } from "../../contexts/AuthContext";
 import { MOCK_EMPLOYEES, EMPLOYEE_STATS } from "../../data/employeesMockData";
 import type { Employee } from "../../types/employee";
 
@@ -26,7 +26,8 @@ const STATUS_FILTERS: Array<Employee["employmentStatus"] | "ALL"> = [
 export default function EmployeesPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const canManage = canManageRecords(MOCK_USER.role);
+  const currentUser = useCurrentUser();
+  const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Employee["employmentStatus"] | "ALL">("ALL");
 

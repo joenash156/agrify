@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AreaChart,
   Area,
@@ -21,30 +21,20 @@ import {
   faWarning,
 } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
+import { useCurrentUser } from "../../contexts/AuthContext";
 import { StatCard } from "../../components/dashboard/StatCard";
 import { formatGreeting } from "../../utils/greeting";
-import {
-  MOCK_USER,
-  getDashboardStats,
-  HARVEST_CHART_DATA,
-  SALES_CHART_DATA,
-  CROP_STATUS_DATA,
-  RECENT_SALES,
-  UPCOMING_HARVESTS,
-  MY_SALES_TREND,
-  MY_ORDER_STATUS_DATA,
-  MY_ATTENDANCE_BREAKDOWN,
-  MY_CROPS_STATUS_DATA,
-} from "../../data/dashboardMockData";
+import { getDashboardOverview, type DashboardOverview } from "../../services/dashboardService";
+import { RECENT_SALES, UPCOMING_HARVESTS } from "../../data/dashboardMockData";
 
 function SaleStatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    Paid:    "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
-    Pending: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
-    Overdue: "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
+    Paid:            "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+    "Partially Paid": "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
+    Unpaid:          "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
   };
   return (
-    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${map[status] ?? map["Pending"]}`}>
+    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${map[status] ?? map["Partially Paid"]}`}>
       {status}
     </span>
   );
@@ -59,17 +49,29 @@ function HarvestUrgencyBadge({ days }: { days: number }) {
 export default function DashboardPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
+  const user = useCurrentUser();
+  const isAdmin = user.role === "ADMIN" || user.role === "FARM_MANAGER";
+
+  const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const user = MOCK_USER;
-  const stats = getDashboardStats(user.role);
-  const isAdmin = user.role === "ADMIN" || user.role === "FARM_MANAGER";
+  const fetchOverview = useCallback(() => {
+    return getDashboardOverview()
+      .then(setOverview)
+      .catch(() => setOverview(null));
+  }, []);
+
+  useEffect(() => {
+    fetchOverview();
+  }, [fetchOverview]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
-    // Simulate API call — replace with actual service call on integration
-    setTimeout(() => setIsRefreshing(false), 1200);
+    fetchOverview().finally(() => setIsRefreshing(false));
   };
+
+  const stats = overview?.stats ?? [];
+  const charts = overview?.charts;
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
@@ -87,7 +89,7 @@ export default function DashboardPage() {
           </h2>
           <p className={`text-xs sm:text-sm mt-0.5 font-medium ${subText}`}>
             {isAdmin
-              ? `Here's what's happening across your ${user.farmName ?? "farms"} today.`
+              ? "Here's what's happening across your farms today."
               : "Here's your work summary for today."}
           </p>
         </div>
@@ -116,21 +118,16 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Charts Section — tailored per role ── */}
-      {isAdmin && (
+      {isAdmin && charts && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Revenue Area Chart — 2/3 width */}
           <div className={`lg:col-span-2 p-5 rounded-2xl border ${cardBg}`}>
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Monthly Revenue</h3>
-                <p className={`text-xs ${subText}`}>Last 6 months sales trend</p>
-              </div>
-              <span className={`text-[10px] font-bold px-2 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 ${isDark ? "text-teal-400" : "text-teal-600"}`}>
-                ₵ 24,800 this month
-              </span>
+            <div className="mb-4">
+              <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Monthly Revenue</h3>
+              <p className={`text-xs ${subText}`}>Last 6 months sales trend</p>
             </div>
             <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={SALES_CHART_DATA} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+              <AreaChart data={charts.salesChart} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.25} />
@@ -139,7 +136,7 @@ export default function DashboardPage() {
                 </defs>
                 <CartesianGrid stroke={chartGrid} strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="month" tick={{ fill: chartText, fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: chartText, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₵${v / 1000}k`} />
+                <YAxis tick={{ fill: chartText, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₵${Number(v) / 1000}k`} />
                 <Tooltip
                   contentStyle={{ background: isDark ? "#18181b" : "#fff", border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`, borderRadius: 12, fontSize: 11 }}
                   formatter={(v) => [`₵ ${Number(v).toLocaleString()}`, "Revenue"]}
@@ -158,7 +155,7 @@ export default function DashboardPage() {
             <ResponsiveContainer width="100%" height={150}>
               <PieChart>
                 <Pie
-                  data={CROP_STATUS_DATA}
+                  data={charts.cropStatusChart}
                   cx="50%"
                   cy="50%"
                   innerRadius={40}
@@ -166,8 +163,8 @@ export default function DashboardPage() {
                   paddingAngle={3}
                   dataKey="value"
                 >
-                  {CROP_STATUS_DATA.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
+                  {charts.cropStatusChart.map((entry, i) => (
+                    <Cell key={i} fill={String(entry.color)} />
                   ))}
                 </Pie>
                 <Tooltip
@@ -176,10 +173,10 @@ export default function DashboardPage() {
               </PieChart>
             </ResponsiveContainer>
             <div className="space-y-1.5 mt-2">
-              {CROP_STATUS_DATA.map((d) => (
-                <div key={d.name} className="flex items-center justify-between">
+              {charts.cropStatusChart.map((d) => (
+                <div key={String(d.name)} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <FontAwesomeIcon icon={faCircle} className="w-2 h-2" style={{ color: d.color }} />
+                    <FontAwesomeIcon icon={faCircle} className="w-2 h-2" style={{ color: String(d.color) }} />
                     <span className={`text-xs font-semibold ${subText}`}>{d.name}</span>
                   </div>
                   <span className={`text-xs font-bold ${sectionTitle}`}>{d.value}</span>
@@ -190,14 +187,12 @@ export default function DashboardPage() {
 
           {/* Harvest Yield Bar Chart — full width */}
           <div className={`lg:col-span-3 p-5 rounded-2xl border ${cardBg}`}>
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Harvest Yield (kg)</h3>
-                <p className={`text-xs ${subText}`}>Monthly total yield across all farms</p>
-              </div>
+            <div className="mb-4">
+              <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Harvest Yield (kg)</h3>
+              <p className={`text-xs ${subText}`}>Monthly total yield across all farms</p>
             </div>
             <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={HARVEST_CHART_DATA} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+              <BarChart data={charts.harvestChart} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                 <CartesianGrid stroke={chartGrid} strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="month" tick={{ fill: chartText, fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: chartText, fontSize: 11 }} axisLine={false} tickLine={false} unit=" kg" />
@@ -212,7 +207,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {user.role === "SALES_PERSON" && (
+      {user.role === "SALES_PERSON" && charts && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* My Sales Trend — 2/3 width */}
           <div className={`lg:col-span-2 p-5 rounded-2xl border ${cardBg}`}>
@@ -221,7 +216,7 @@ export default function DashboardPage() {
               <p className={`text-xs ${subText}`}>Last 6 months of your closed orders</p>
             </div>
             <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={MY_SALES_TREND} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+              <AreaChart data={charts.mySalesTrend} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="mySalesGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.25} />
@@ -230,7 +225,7 @@ export default function DashboardPage() {
                 </defs>
                 <CartesianGrid stroke={chartGrid} strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="month" tick={{ fill: chartText, fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: chartText, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₵${v / 1000}k`} />
+                <YAxis tick={{ fill: chartText, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₵${Number(v) / 1000}k`} />
                 <Tooltip
                   contentStyle={{ background: isDark ? "#18181b" : "#fff", border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`, borderRadius: 12, fontSize: 11 }}
                   formatter={(v) => [`₵ ${Number(v).toLocaleString()}`, "My Revenue"]}
@@ -248,9 +243,9 @@ export default function DashboardPage() {
             </div>
             <ResponsiveContainer width="100%" height={150}>
               <PieChart>
-                <Pie data={MY_ORDER_STATUS_DATA} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={3} dataKey="value">
-                  {MY_ORDER_STATUS_DATA.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
+                <Pie data={charts.myOrderStatus} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={3} dataKey="value">
+                  {charts.myOrderStatus.map((entry, i) => (
+                    <Cell key={i} fill={String(entry.color)} />
                   ))}
                 </Pie>
                 <Tooltip
@@ -259,10 +254,10 @@ export default function DashboardPage() {
               </PieChart>
             </ResponsiveContainer>
             <div className="space-y-1.5 mt-2">
-              {MY_ORDER_STATUS_DATA.map((d) => (
-                <div key={d.name} className="flex items-center justify-between">
+              {charts.myOrderStatus.map((d) => (
+                <div key={String(d.name)} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <FontAwesomeIcon icon={faCircle} className="w-2 h-2" style={{ color: d.color }} />
+                    <FontAwesomeIcon icon={faCircle} className="w-2 h-2" style={{ color: String(d.color) }} />
                     <span className={`text-xs font-semibold ${subText}`}>{d.name}</span>
                   </div>
                   <span className={`text-xs font-bold ${sectionTitle}`}>{d.value}</span>
@@ -273,16 +268,16 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {user.role === "WORKER" && (
+      {user.role === "WORKER" && charts && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* My Attendance Bar Chart */}
           <div className={`p-5 rounded-2xl border ${cardBg}`}>
             <div className="mb-4">
               <h3 className={`text-sm font-extrabold ${sectionTitle}`}>My Attendance</h3>
-              <p className={`text-xs ${subText}`}>This month's attendance record</p>
+              <p className={`text-xs ${subText}`}>Last 30 days</p>
             </div>
             <ResponsiveContainer width="100%" height={170}>
-              <BarChart data={MY_ATTENDANCE_BREAKDOWN} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+              <BarChart data={charts.myAttendance} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                 <CartesianGrid stroke={chartGrid} strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="status" tick={{ fill: chartText, fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: chartText, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
@@ -298,14 +293,14 @@ export default function DashboardPage() {
           {/* My Crops Status Pie */}
           <div className={`p-5 rounded-2xl border ${cardBg}`}>
             <div className="mb-4">
-              <h3 className={`text-sm font-extrabold ${sectionTitle}`}>My Assigned Crops</h3>
-              <p className={`text-xs ${subText}`}>Status of crops assigned to you</p>
+              <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Crops At My Farm</h3>
+              <p className={`text-xs ${subText}`}>Status breakdown</p>
             </div>
             <ResponsiveContainer width="100%" height={150}>
               <PieChart>
-                <Pie data={MY_CROPS_STATUS_DATA} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={3} dataKey="value">
-                  {MY_CROPS_STATUS_DATA.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
+                <Pie data={charts.myCropsStatus} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={3} dataKey="value">
+                  {charts.myCropsStatus.map((entry, i) => (
+                    <Cell key={i} fill={String(entry.color)} />
                   ))}
                 </Pie>
                 <Tooltip
@@ -314,10 +309,10 @@ export default function DashboardPage() {
               </PieChart>
             </ResponsiveContainer>
             <div className="space-y-1.5 mt-2">
-              {MY_CROPS_STATUS_DATA.map((d) => (
-                <div key={d.name} className="flex items-center justify-between">
+              {charts.myCropsStatus.map((d) => (
+                <div key={String(d.name)} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <FontAwesomeIcon icon={faCircle} className="w-2 h-2" style={{ color: d.color }} />
+                    <FontAwesomeIcon icon={faCircle} className="w-2 h-2" style={{ color: String(d.color) }} />
                     <span className={`text-xs font-semibold ${subText}`}>{d.name}</span>
                   </div>
                   <span className={`text-xs font-bold ${sectionTitle}`}>{d.value}</span>

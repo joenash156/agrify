@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faReceipt, faCalendarDay, faUser } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
+import { useCurrentUser } from "../../contexts/AuthContext";
 import { StatCard } from "../../components/dashboard/StatCard";
 import { StatusBadge } from "../../components/common/StatusBadge";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -11,34 +12,44 @@ import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageOwnedRecord, canCreateSales } from "../../utils/permissions";
-import { MOCK_USER } from "../../data/dashboardMockData";
-import { MOCK_SALES, SALES_STATS } from "../../data/salesMockData";
+import { SALES_STATS } from "../../data/salesMockData";
+import { saleService } from "../../services/saleService";
 import type { Sale } from "../../types/sale";
 
-const STATUS_FILTERS: Array<Sale["saleStatus"] | "ALL"> = ["ALL", "PAID", "PENDING", "OVERDUE", "CANCELLED"];
-
-const CURRENT_USER_NAME = `${MOCK_USER.firstName} ${MOCK_USER.lastName}`;
+const STATUS_FILTERS: Array<Sale["saleStatus"] | "ALL"> = ["ALL", "PAID", "PARTIALLY_PAID", "UNPAID", "CANCELLED"];
 
 export default function SalesPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const canCreate = canCreateSales(MOCK_USER.role);
+  const currentUser = useCurrentUser();
+  const currentUserName = `${currentUser.firstName} ${currentUser.lastName}`;
+  const canCreate = canCreateSales(currentUser.role);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Sale["saleStatus"] | "ALL">("ALL");
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    saleService
+      .findAll()
+      .then(setSales)
+      .catch(() => setSales([]))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
   const subText = isDark ? "text-zinc-500" : "text-zinc-500";
 
   const filteredSales = useMemo(() => {
-    return MOCK_SALES.filter((sale) => {
+    return sales.filter((sale) => {
       const matchesSearch =
         sale.customerName.toLowerCase().includes(search.toLowerCase()) ||
         sale.saleId.toLowerCase().includes(search.toLowerCase());
       const matchesStatus = statusFilter === "ALL" || sale.saleStatus === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [search, statusFilter]);
+  }, [sales, search, statusFilter]);
 
   return (
     <>
@@ -112,7 +123,7 @@ export default function SalesPage() {
                     <div className={`flex items-center gap-1.5 text-xs font-medium ${subText}`}>
                       <FontAwesomeIcon icon={faUser} className="w-3 h-3" />
                       {sale.soldBy}
-                      {sale.soldBy === CURRENT_USER_NAME && (
+                      {sale.soldBy === currentUserName && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400">
                           You
                         </span>
@@ -131,7 +142,7 @@ export default function SalesPage() {
                   </td>
                   <td className="px-5 py-3.5">
                     <RowActions
-                      canManage={canManageOwnedRecord(MOCK_USER.role, sale.soldBy === CURRENT_USER_NAME)}
+                      canManage={canManageOwnedRecord(currentUser.role, sale.soldBy === currentUserName)}
                       entityLabel="sale"
                     />
                   </td>
@@ -140,7 +151,7 @@ export default function SalesPage() {
             </tbody>
           </table>
         </div>
-        {filteredSales.length === 0 && <EmptyState title="No sales found" />}
+        {!isLoading && filteredSales.length === 0 && <EmptyState title="No sales found" />}
       </div>
 
       {/* Mobile cards */}
@@ -152,16 +163,16 @@ export default function SalesPage() {
             title={sale.customerName}
             subtitle={`${sale.saleId} · ${sale.itemCount} item${sale.itemCount > 1 ? "s" : ""}`}
             badge={<StatusBadge status={sale.saleStatus} variant="sale" />}
-            canManage={canManageOwnedRecord(MOCK_USER.role, sale.soldBy === CURRENT_USER_NAME)}
+            canManage={canManageOwnedRecord(currentUser.role, sale.soldBy === currentUserName)}
             entityLabel="sale"
             fields={[
               { label: "Date", value: formatDate(sale.saleDate) },
               { label: "Total", value: `₵ ${sale.total.toLocaleString()}` },
-              { label: "Sold By", value: sale.soldBy === CURRENT_USER_NAME ? `${sale.soldBy} (You)` : sale.soldBy },
+              { label: "Sold By", value: sale.soldBy === currentUserName ? `${sale.soldBy} (You)` : sale.soldBy },
             ]}
           />
         ))}
-        {filteredSales.length === 0 && <EmptyState title="No sales found" />}
+        {!isLoading && filteredSales.length === 0 && <EmptyState title="No sales found" />}
       </div>
     </>
   );

@@ -11,13 +11,14 @@ import {
   faCircleCheck,
 } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
+import { useCurrentUser } from "../../contexts/AuthContext";
 import { PageHeader } from "../../components/common/PageHeader";
 import { AuthInput } from "../../components/common/AuthInput";
 import { EyeToggle } from "../../components/common/EyeToggle";
 import { Switch } from "../../components/common/Switch";
 import { StatusBadge } from "../../components/common/StatusBadge";
 import { ThemeSwitcher } from "../../components/common/ThemeSwitcher";
-import { MOCK_USER, MOCK_USER_ACCOUNT } from "../../data/dashboardMockData";
+import { changePassword } from "../../services/authService";
 import { getNavGroups } from "../../data/dashboardNav";
 
 const TABS = [
@@ -32,18 +33,22 @@ type TabId = (typeof TABS)[number]["id"];
 export default function SettingsPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
+  const currentUser = useCurrentUser();
   const [activeTab, setActiveTab] = useState<TabId>("profile");
 
   const [profile, setProfile] = useState({
-    firstName: MOCK_USER.firstName,
-    lastName: MOCK_USER.lastName,
-    email: MOCK_USER.email,
-    phone: MOCK_USER.phone ?? "",
+    firstName: currentUser.firstName,
+    lastName: currentUser.lastName,
+    email: currentUser.email,
+    phone: "",
   });
 
   const [passwords, setPasswords] = useState({ current: "", next: "", confirm: "" });
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNext, setShowNext] = useState(false);
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
 
   const [preferences, setPreferences] = useState({ emailNotifications: true, smsNotifications: false });
 
@@ -56,7 +61,27 @@ export default function SettingsPage() {
   const initials = `${profile.firstName[0] ?? ""}${profile.lastName[0] ?? ""}`.toUpperCase();
   const pwMismatch = passwords.confirm.length > 0 && passwords.confirm !== passwords.next;
 
-  const navGroups = getNavGroups(MOCK_USER.role);
+  const navGroups = getNavGroups(currentUser.role);
+
+  const handleChangePassword = async () => {
+    if (!passwords.current || !passwords.next || passwords.next !== passwords.confirm || passwordSubmitting) return;
+    setPasswordSubmitting(true);
+    setPasswordError(null);
+    try {
+      await changePassword(passwords.current, passwords.next);
+      setPasswordSuccess(true);
+      setPasswords({ current: "", next: "", confirm: "" });
+      setTimeout(() => setPasswordSuccess(false), 2500);
+    } catch (err) {
+      const message =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+          : undefined;
+      setPasswordError(message ?? "Failed to update password. Please try again.");
+    } finally {
+      setPasswordSubmitting(false);
+    }
+  };
 
   return (
     <>
@@ -169,11 +194,11 @@ export default function SettingsPage() {
                   <FontAwesomeIcon icon={faIdBadge} className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
-                  <p className={`text-xs font-bold truncate ${sectionTitle}`}>@{MOCK_USER_ACCOUNT.username}</p>
+                  <p className={`text-xs font-bold truncate ${sectionTitle}`}>@{currentUser.username}</p>
                   <p className={`text-[11px] ${subText}`}>Username</p>
                 </div>
               </div>
-              <StatusBadge status={MOCK_USER_ACCOUNT.accountStatus} variant="employment" />
+              <StatusBadge status="ACTIVE" variant="employment" />
             </div>
 
             <div className={`h-px ${isDark ? "bg-zinc-800" : "bg-zinc-200"}`} />
@@ -226,13 +251,19 @@ export default function SettingsPage() {
                   {pwMismatch && <p className="text-[11px] text-red-500 font-semibold mt-1 px-0.5">Passwords do not match</p>}
                 </div>
               </div>
+              {passwordError && (
+                <p className="text-[11px] text-red-500 font-semibold mt-3 px-0.5">{passwordError}</p>
+              )}
+              {passwordSuccess && (
+                <p className="text-[11px] text-teal-600 dark:text-teal-400 font-semibold mt-3 px-0.5">Password updated successfully.</p>
+              )}
               <button
                 type="button"
-                disabled={!passwords.current || !passwords.next || passwords.next !== passwords.confirm}
-                onClick={() => alert("Password updates will be available once the backend is connected.")}
+                disabled={!passwords.current || !passwords.next || passwords.next !== passwords.confirm || passwordSubmitting}
+                onClick={handleChangePassword}
                 className="mt-4 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 active:scale-[0.98] transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Update Password
+                {passwordSubmitting ? "Updating..." : "Update Password"}
               </button>
             </div>
           </div>
@@ -248,7 +279,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="min-w-0">
                   <p className={`text-[11px] ${subText}`}>Platform Role</p>
-                  <p className={`text-xs font-bold truncate ${sectionTitle}`}>{MOCK_USER.role.replace(/_/g, " ")}</p>
+                  <p className={`text-xs font-bold truncate ${sectionTitle}`}>{currentUser.role.replace(/_/g, " ")}</p>
                 </div>
               </div>
               <div className={`p-4 rounded-xl border flex items-center gap-3 ${isDark ? "border-zinc-800 bg-zinc-800/40" : "border-zinc-200 bg-zinc-50"}`}>
@@ -256,8 +287,8 @@ export default function SettingsPage() {
                   <FontAwesomeIcon icon={faTractor} className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
-                  <p className={`text-[11px] ${subText}`}>Assigned Farm</p>
-                  <p className={`text-xs font-bold truncate ${sectionTitle}`}>{MOCK_USER.farmName ?? "—"}</p>
+                  <p className={`text-[11px] ${subText}`}>Username</p>
+                  <p className={`text-xs font-bold truncate ${sectionTitle}`}>@{currentUser.username}</p>
                 </div>
               </div>
             </div>

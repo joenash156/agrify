@@ -1,18 +1,25 @@
 import { Outlet, Navigate } from "react-router-dom";
 import { SidebarProvider, useSidebar } from "../contexts/SidebarContext";
 import { NotificationsProvider } from "../contexts/NotificationsContext";
+import { useAuth, useCurrentUser } from "../contexts/AuthContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { Sidebar } from "../components/layout/Sidebar";
 import { DashboardTopBar } from "../components/layout/DashboardTopBar";
-import { MOCK_USER } from "../data/dashboardMockData";
+import type { UserProfile } from "../types/user";
 
 function PrivateShell() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const { isCollapsed, isOpen, toggleCollapsed, toggleOpen, closeSidebar } = useSidebar();
+  const authUser = useCurrentUser();
 
-  // Demo user — replace with real auth session on backend integration
-  const user = MOCK_USER;
+  const user: UserProfile = {
+    id: authUser.userId,
+    firstName: authUser.firstName,
+    lastName: authUser.lastName,
+    email: authUser.email,
+    role: authUser.role,
+  };
 
   return (
     <div className={`flex h-screen w-full overflow-hidden font-kumbh ${isDark ? "bg-zinc-950" : "bg-zinc-50"}`}>
@@ -36,10 +43,14 @@ function PrivateShell() {
 }
 
 export function PrivateAppLayout() {
-  // Simple check for demo token — replace with proper auth context on backend integration
-  const isAuthenticated = Boolean(localStorage.getItem("agrify_auth_token"));
+  const { user, isLoading } = useAuth();
 
-  if (!isAuthenticated) {
+  if (isLoading) {
+    // Brief silent-refresh check on load — avoids a login-page flash for an already-valid session.
+    return null;
+  }
+
+  if (!user) {
     return <Navigate to="/auth" replace />;
   }
 

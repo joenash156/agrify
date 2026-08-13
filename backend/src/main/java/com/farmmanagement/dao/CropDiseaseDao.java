@@ -9,5 +9,5 @@ public interface CropDiseaseDao {
     List<CropDisease> findAll();
     List<CropDisease> findByCrop(UUID cropId);
     void save(CropDisease item);
-    void delete(UUID cropId, UUID diseaseId);
+    boolean delete(UUID cropDiseaseId);
 }

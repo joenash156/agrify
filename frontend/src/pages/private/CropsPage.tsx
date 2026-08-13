@@ -11,7 +11,7 @@ import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
-import { MOCK_USER } from "../../data/dashboardMockData";
+import { useCurrentUser } from "../../contexts/AuthContext";
 import { MOCK_CROPS, CROP_STATS } from "../../data/cropsMockData";
 import type { Crop } from "../../types/crop";
 
@@ -27,7 +27,8 @@ const STATUS_FILTERS: Array<Crop["cropStatus"] | "ALL"> = [
 export default function CropsPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const canManage = canManageRecords(MOCK_USER.role);
+  const currentUser = useCurrentUser();
+  const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Crop["cropStatus"] | "ALL">("ALL");
 

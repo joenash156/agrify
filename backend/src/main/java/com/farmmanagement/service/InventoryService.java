@@ -17,19 +17,21 @@ public class InventoryService {
     public Inventory create(InventoryDto dto) {
         Inventory item = new Inventory();
         item.setInventoryId(java.util.UUID.randomUUID());
-        item.setFarmId(dto.getFarmId());
+        item.setHarvestId(dto.getHarvestId());
         item.setItemName(dto.getItemName());
         item.setQuantity(dto.getQuantity());
-        item.setUnitPrice(dto.getUnitPrice());
+        item.setUnit(dto.getUnit());
+        item.setStorageLocation(dto.getStorageLocation());
         return dao.save(item);
     }
     public Inventory update(UUID id, InventoryDto dto) {
         Inventory item = new Inventory();
         item.setInventoryId(id);
-        item.setFarmId(dto.getFarmId());
+        item.setHarvestId(dto.getHarvestId());
         item.setItemName(dto.getItemName());
         item.setQuantity(dto.getQuantity());
-        item.setUnitPrice(dto.getUnitPrice());
+        item.setUnit(dto.getUnit());
+        item.setStorageLocation(dto.getStorageLocation());
         if (!dao.update(id, item)) throw new RuntimeException("Inventory not found");
         return findById(id);
     }

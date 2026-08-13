@@ -15,6 +15,9 @@ public class JdbcCropDiseaseDao implements CropDiseaseDao {
     public JdbcCropDiseaseDao(JdbcTemplate jdbcTemplate){this.jdbcTemplate=jdbcTemplate;}
     public List<CropDisease> findAll(){return jdbcTemplate.query("SELECT * FROM crop_disease",BeanPropertyRowMapper.newInstance(CropDisease.class));}
     public List<CropDisease> findByCrop(UUID cropId){return jdbcTemplate.query("SELECT * FROM crop_disease WHERE crop_id=?",BeanPropertyRowMapper.newInstance(CropDisease.class),cropId);}
-    public void save(CropDisease item){jdbcTemplate.update("INSERT INTO crop_disease(crop_id,disease_id,detected_date,severity,treatment) VALUES(?,?,?,?,?)",item.getCropId(),item.getDiseaseId(),item.getDetectedDate(),item.getSeverity(),item.getTreatment());}
-    public void delete(UUID cropId,UUID diseaseId){jdbcTemplate.update("DELETE FROM crop_disease WHERE crop_id=? AND disease_id=?",cropId,diseaseId);}
+    public void save(CropDisease item){
+        jdbcTemplate.update("INSERT INTO crop_disease(crop_disease_id,crop_id,disease_id,detected_date,severity,treatment) VALUES(?,?,?,?,?,?)",
+                item.getCropDiseaseId(),item.getCropId(),item.getDiseaseId(),item.getDetectedDate(),item.getSeverity(),item.getTreatment());
+    }
+    public boolean delete(UUID cropDiseaseId){return jdbcTemplate.update("DELETE FROM crop_disease WHERE crop_disease_id=?",cropDiseaseId) > 0;}
 }

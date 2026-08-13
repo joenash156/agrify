@@ -7,5 +7,5 @@ export interface Sale {
   saleDate: string;
   total: number;
   itemCount: number;
-  saleStatus: "PAID" | "PENDING" | "OVERDUE" | "CANCELLED";
+  saleStatus: "PAID" | "PARTIALLY_PAID" | "UNPAID" | "CANCELLED";
 }

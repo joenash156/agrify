@@ -9,6 +9,7 @@ import {
   faRightFromBracket,
 } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { useNotifications } from "../../contexts/NotificationsContext";
 import { ThemeSwitcher } from "../common/ThemeSwitcher";
 import { formatGreeting, formatFormattedDate } from "../../utils/greeting";
@@ -46,6 +47,7 @@ export function DashboardTopBar({ user, onOpenMobileSidebar }: DashboardTopBarPr
   const location = useLocation();
   const navigate = useNavigate();
   const { unreadCount } = useNotifications();
+  const { logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -60,9 +62,9 @@ export function DashboardTopBar({ user, onOpenMobileSidebar }: DashboardTopBarPr
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setMenuOpen(false);
-    localStorage.removeItem("agrify_auth_token");
+    await logout();
     navigate("/auth");
   };
 

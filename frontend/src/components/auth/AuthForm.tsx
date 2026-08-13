@@ -10,21 +10,31 @@ import {
   faCheckCircle,
 } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { AuthInput } from "../common/AuthInput";
 import { EyeToggle } from "../common/EyeToggle";
 import { PasswordStrengthMeter } from "./PasswordStrengthMeter";
 import type { AuthMode, LoginFormData, RegisterFormData } from "../../types/auth";
 
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (err && typeof err === "object" && "response" in err) {
+    const response = (err as { response?: { data?: { error?: string } } }).response;
+    if (response?.data?.error) return response.data.error;
+  }
+  return fallback;
+}
+
 export function AuthForm() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const navigate = useNavigate();
+  const { login, register } = useAuth();
 
   const [mode, setMode] = useState<AuthMode>("login");
 
   // Login form state
   const [loginData, setLoginData] = useState<LoginFormData>({
-    email: "",
+    username: "",
     password: "",
     rememberMe: false,
   });
@@ -38,6 +48,7 @@ export function AuthForm() {
     lastName: "",
     phone: "",
     email: "",
+    username: "",
     password: "",
     confirmPassword: "",
   });
@@ -58,19 +69,16 @@ export function AuthForm() {
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginData.email || !loginData.password || loginSubmitting) return;
+    if (!loginData.username || !loginData.password || loginSubmitting) return;
 
     setLoginSubmitting(true);
     setLoginError(null);
 
     try {
-      // Temporary authentication simulation for frontend development
-      await new Promise((res) => setTimeout(res, 800));
-      // Store dummy auth token/user in localStorage for demo
-      localStorage.setItem("agrify_auth_token", "demo-jwt-token");
+      await login(loginData.username, loginData.password);
       navigate("/dashboard");
-    } catch {
-      setLoginError("Invalid email or password. Please try again.");
+    } catch (err) {
+      setLoginError(extractErrorMessage(err, "Invalid username or password. Please try again."));
     } finally {
       setLoginSubmitting(false);
     }
@@ -84,19 +92,26 @@ export function AuthForm() {
     setRegisterError(null);
 
     try {
-      await new Promise((res) => setTimeout(res, 1000));
+      await register({
+        firstName: registerData.firstName,
+        lastName: registerData.lastName,
+        email: registerData.email,
+        phoneNumber: registerData.phone,
+        username: registerData.username,
+        password: registerData.password,
+      });
       setRegisterSuccess(true);
       setTimeout(() => {
         setLoginData({
-          email: registerData.email,
+          username: registerData.username,
           password: "",
           rememberMe: false,
         });
         setMode("login");
         setRegisterSuccess(false);
       }, 1500);
-    } catch {
-      setRegisterError("Failed to create account. Please try again.");
+    } catch (err) {
+      setRegisterError(extractErrorMessage(err, "Failed to create account. Please try again."));
     } finally {
       setRegisterSubmitting(false);
     }
@@ -111,6 +126,7 @@ export function AuthForm() {
     registerData.firstName.trim().length > 0 &&
     registerData.lastName.trim().length > 0 &&
     isValidEmail(registerData.email) &&
+    registerData.username.trim().length > 0 &&
     registerData.password.length >= 6 &&
     registerData.confirmPassword === registerData.password;
 
@@ -170,17 +186,17 @@ export function AuthForm() {
                   isDark ? "text-zinc-300" : "text-zinc-800"
                 }`}
               >
-                Email Address
+                Username
               </label>
               <AuthInput
-                icon={faEnvelope}
-                type="email"
-                name="email"
-                placeholder="name@farm.com"
-                value={loginData.email}
+                icon={faUser}
+                type="text"
+                name="username"
+                placeholder="e.g. admin"
+                value={loginData.username}
                 onChange={handleLoginChange}
                 isDark={isDark}
-                autoComplete="email"
+                autoComplete="username"
                 required
               />
             </div>
@@ -258,7 +274,7 @@ export function AuthForm() {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={!loginData.email || !loginData.password || loginSubmitting}
+            disabled={!loginData.username || !loginData.password || loginSubmitting}
             className="w-full py-3 px-4 rounded-xl text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 active:scale-[0.98] transition-all duration-150 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-2 mt-2"
           >
             {loginSubmitting ? (
@@ -341,6 +357,27 @@ export function AuthForm() {
                 required
               />
             </div>
+          </div>
+
+          {/* Username */}
+          <div>
+            <label
+              className={`block text-xs font-bold uppercase tracking-wider mb-1 ${
+                isDark ? "text-zinc-300" : "text-zinc-800"
+              }`}
+            >
+              Username
+            </label>
+            <AuthInput
+              icon={faUser}
+              name="username"
+              placeholder="e.g. john.doe"
+              value={registerData.username}
+              onChange={handleRegisterChange}
+              isDark={isDark}
+              autoComplete="username"
+              required
+            />
           </div>
 
           {/* Phone Number */}

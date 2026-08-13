@@ -6,21 +6,24 @@ import java.math.BigDecimal;
 
 public class Inventory {
     private UUID inventoryId;
-    private UUID farmId;
+    private UUID harvestId;
     private String itemName;
     private BigDecimal quantity;
-    private BigDecimal unitPrice;
+    private String unit;
+    private String storageLocation;
 
     public Inventory() {}
 
     public UUID getInventoryId() { return inventoryId; }
     public void setInventoryId(UUID inventoryId) { this.inventoryId = inventoryId; }
-    public UUID getFarmId() { return farmId; }
-    public void setFarmId(UUID farmId) { this.farmId = farmId; }
+    public UUID getHarvestId() { return harvestId; }
+    public void setHarvestId(UUID harvestId) { this.harvestId = harvestId; }
     public String getItemName() { return itemName; }
     public void setItemName(String itemName) { this.itemName = itemName; }
     public BigDecimal getQuantity() { return quantity; }
     public void setQuantity(BigDecimal quantity) { this.quantity = quantity; }
-    public BigDecimal getUnitPrice() { return unitPrice; }
-    public void setUnitPrice(BigDecimal unitPrice) { this.unitPrice = unitPrice; }
+    public String getUnit() { return unit; }
+    public void setUnit(String unit) { this.unit = unit; }
+    public String getStorageLocation() { return storageLocation; }
+    public void setStorageLocation(String storageLocation) { this.storageLocation = storageLocation; }
 }

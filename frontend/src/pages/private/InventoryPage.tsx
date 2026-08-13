@@ -9,7 +9,7 @@ import { EntityCard } from "../../components/common/EntityCard";
 import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
 import { canManageRecords } from "../../utils/permissions";
-import { MOCK_USER } from "../../data/dashboardMockData";
+import { useCurrentUser } from "../../contexts/AuthContext";
 import { MOCK_INVENTORY, INVENTORY_STATS } from "../../data/inventoryMockData";
 
 const LOCATION_FILTERS = ["ALL", "Warehouse A", "Warehouse B", "Warehouse C"] as const;
@@ -17,7 +17,8 @@ const LOCATION_FILTERS = ["ALL", "Warehouse A", "Warehouse B", "Warehouse C"] as
 export default function InventoryPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const canManage = canManageRecords(MOCK_USER.role);
+  const currentUser = useCurrentUser();
+  const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [locationFilter, setLocationFilter] = useState<(typeof LOCATION_FILTERS)[number]>("ALL");
 

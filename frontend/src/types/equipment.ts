@@ -6,5 +6,5 @@ export interface Equipment {
   equipmentType: string;
   purchaseDate: string;
   purchaseCost: number;
-  equipmentStatus: "OPERATIONAL" | "MAINTENANCE" | "BROKEN" | "RETIRED";
+  equipmentStatus: "AVAILABLE" | "IN_USE" | "MAINTENANCE" | "BROKEN" | "RETIRED";
 }

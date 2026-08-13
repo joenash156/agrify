@@ -5,6 +5,7 @@ import java.util.UUID;
 import java.time.LocalDate;
 
 public class CropDisease {
+    private UUID cropDiseaseId;
     private UUID cropId;
     private UUID diseaseId;
     private LocalDate detectedDate;
@@ -13,6 +14,8 @@ public class CropDisease {
 
     public CropDisease() {}
 
+    public UUID getCropDiseaseId() { return cropDiseaseId; }
+    public void setCropDiseaseId(UUID cropDiseaseId) { this.cropDiseaseId = cropDiseaseId; }
     public UUID getCropId() { return cropId; }
     public void setCropId(UUID cropId) { this.cropId = cropId; }
     public UUID getDiseaseId() { return diseaseId; }

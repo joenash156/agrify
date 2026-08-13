@@ -11,7 +11,7 @@ import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
-import { MOCK_USER } from "../../data/dashboardMockData";
+import { useCurrentUser } from "../../contexts/AuthContext";
 import { MOCK_FARMS, FARM_STATS } from "../../data/farmsMockData";
 import type { Farm } from "../../types/farm";
 
@@ -26,7 +26,8 @@ const STATUS_FILTERS: Array<Farm["farmStatus"] | "ALL"> = [
 export default function FarmsPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const canManage = canManageRecords(MOCK_USER.role);
+  const currentUser = useCurrentUser();
+  const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Farm["farmStatus"] | "ALL">("ALL");
 

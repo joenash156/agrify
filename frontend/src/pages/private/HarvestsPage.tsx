@@ -11,7 +11,7 @@ import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
-import { MOCK_USER } from "../../data/dashboardMockData";
+import { useCurrentUser } from "../../contexts/AuthContext";
 import { MOCK_HARVESTS, HARVEST_STATS } from "../../data/harvestsMockData";
 import type { Harvest } from "../../types/harvest";
 
@@ -20,7 +20,8 @@ const GRADE_FILTERS: Array<Harvest["qualityGrade"] | "ALL"> = ["ALL", "PREMIUM",
 export default function HarvestsPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const canManage = canManageRecords(MOCK_USER.role);
+  const currentUser = useCurrentUser();
+  const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState<Harvest["qualityGrade"] | "ALL">("ALL");
 

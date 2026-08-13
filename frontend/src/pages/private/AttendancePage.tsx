@@ -11,7 +11,7 @@ import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
-import { MOCK_USER } from "../../data/dashboardMockData";
+import { useCurrentUser } from "../../contexts/AuthContext";
 import { MOCK_ATTENDANCE, ATTENDANCE_STATS } from "../../data/attendanceMockData";
 import type { Attendance } from "../../types/attendance";
 
@@ -20,7 +20,8 @@ const STATUS_FILTERS: Array<Attendance["attendanceStatus"] | "ALL"> = ["ALL", "P
 export default function AttendancePage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const canManage = canManageRecords(MOCK_USER.role);
+  const currentUser = useCurrentUser();
+  const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Attendance["attendanceStatus"] | "ALL">("ALL");
 

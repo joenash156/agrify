@@ -5,5 +5,5 @@ export interface Payment {
   amount: number;
   paymentMethod: string;
   paymentDate: string;
-  paymentStatus: "COMPLETED" | "PENDING" | "FAILED" | "REFUNDED";
+  paymentStatus: "CONFIRMED" | "PENDING" | "FAILED" | "REFUNDED";
 }

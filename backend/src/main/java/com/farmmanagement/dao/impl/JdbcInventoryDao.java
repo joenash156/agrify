@@ -28,12 +28,14 @@ public class JdbcInventoryDao implements InventoryDao {
     }
 
     public Inventory save(Inventory item) {
-        jdbcTemplate.update("INSERT INTO inventory (inventory_id, farm_id, item_name, quantity, unit_price) VALUES (?, ?, ?, ?, ?)", item.getInventoryId(), item.getFarmId(), item.getItemName(), item.getQuantity(), item.getUnitPrice());
+        jdbcTemplate.update("INSERT INTO inventory (inventory_id, harvest_id, item_name, quantity, unit, storage_location) VALUES (?, ?, ?, ?, ?, ?)",
+                item.getInventoryId(), item.getHarvestId(), item.getItemName(), item.getQuantity(), item.getUnit(), item.getStorageLocation());
         return item;
     }
 
     public boolean update(UUID id, Inventory item) {
-        return jdbcTemplate.update("UPDATE inventory SET farm_id = ?, item_name = ?, quantity = ?, unit_price = ? WHERE inventory_id = ?", item.getFarmId(), item.getItemName(), item.getQuantity(), item.getUnitPrice(), id) > 0;
+        return jdbcTemplate.update("UPDATE inventory SET harvest_id = ?, item_name = ?, quantity = ?, unit = ?, storage_location = ? WHERE inventory_id = ?",
+                item.getHarvestId(), item.getItemName(), item.getQuantity(), item.getUnit(), item.getStorageLocation(), id) > 0;
     }
 
     public boolean delete(UUID id) {

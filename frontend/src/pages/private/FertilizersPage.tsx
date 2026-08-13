@@ -9,7 +9,7 @@ import { EntityCard } from "../../components/common/EntityCard";
 import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
 import { canManageRecords } from "../../utils/permissions";
-import { MOCK_USER } from "../../data/dashboardMockData";
+import { useCurrentUser } from "../../contexts/AuthContext";
 import { MOCK_FERTILIZERS, FERTILIZER_STATS } from "../../data/fertilizersMockData";
 
 const TYPE_FILTERS = ["ALL", "Compound", "Nitrogen", "Potassium", "Phosphorus", "Organic"] as const;
@@ -17,7 +17,8 @@ const TYPE_FILTERS = ["ALL", "Compound", "Nitrogen", "Potassium", "Phosphorus", 
 export default function FertilizersPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const canManage = canManageRecords(MOCK_USER.role);
+  const currentUser = useCurrentUser();
+  const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<(typeof TYPE_FILTERS)[number]>("ALL");
 

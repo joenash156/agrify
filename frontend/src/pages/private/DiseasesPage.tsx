@@ -11,7 +11,7 @@ import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
-import { MOCK_USER } from "../../data/dashboardMockData";
+import { useCurrentUser } from "../../contexts/AuthContext";
 import { MOCK_CROP_DISEASES, DISEASE_STATS } from "../../data/diseasesMockData";
 import type { DiseaseSeverity } from "../../types/disease";
 
@@ -20,7 +20,8 @@ const SEVERITY_FILTERS: Array<DiseaseSeverity | "ALL"> = ["ALL", "LOW", "MEDIUM"
 export default function DiseasesPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const canManage = canManageRecords(MOCK_USER.role);
+  const currentUser = useCurrentUser();
+  const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState<DiseaseSeverity | "ALL">("ALL");
 

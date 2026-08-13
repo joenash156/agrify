@@ -4,7 +4,7 @@ import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 export type AuthMode = "login" | "register";
 
 export interface LoginFormData {
-  email: string;
+  username: string;
   password: string;
   rememberMe: boolean;
 }
@@ -14,6 +14,7 @@ export interface RegisterFormData {
   lastName: string;
   phone: string;
   email: string;
+  username: string;
   password: string;
   confirmPassword: string;
 }

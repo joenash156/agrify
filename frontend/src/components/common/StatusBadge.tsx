@@ -72,20 +72,21 @@ const cropStatusColors: ColorMap = {
 
 const saleStatusColors: ColorMap = {
   PAID: emerald,
-  PENDING: amber,
-  OVERDUE: red,
+  PARTIALLY_PAID: amber,
+  UNPAID: red,
   CANCELLED: neutral,
 };
 
 const equipmentStatusColors: ColorMap = {
-  OPERATIONAL: emerald,
+  AVAILABLE: emerald,
+  IN_USE: blue,
   MAINTENANCE: amber,
   BROKEN: red,
   RETIRED: neutral,
 };
 
 const paymentStatusColors: ColorMap = {
-  COMPLETED: emerald,
+  CONFIRMED: emerald,
   PENDING: amber,
   FAILED: red,
   REFUNDED: blue,

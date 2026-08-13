@@ -3,6 +3,7 @@ package com.farmmanagement.controller;
 import java.util.UUID;
 
 import com.farmmanagement.dto.SaleDto;
+import com.farmmanagement.dto.SaleSummaryDto;
 import com.farmmanagement.model.Sale;
 import com.farmmanagement.service.SaleService;
 import org.springframework.http.HttpStatus;
@@ -18,6 +19,9 @@ public class SaleController {
 
     @GetMapping
     public List<Sale> findAll() { return service.findAll(); }
+
+    @GetMapping("/summary")
+    public List<SaleSummaryDto> findAllWithDetails() { return service.findAllWithDetails(); }
 
     @GetMapping("/{id}")
     public Sale findById(@PathVariable UUID id) { return service.findById(id); }

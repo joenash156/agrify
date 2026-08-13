@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 public class Sale {
     private UUID saleId;
     private UUID customerId;
+    private UUID employmentId;
     private LocalDateTime saleDate;
     private BigDecimal total;
     private String saleStatus;
@@ -18,6 +19,8 @@ public class Sale {
     public void setSaleId(UUID saleId) { this.saleId = saleId; }
     public UUID getCustomerId() { return customerId; }
     public void setCustomerId(UUID customerId) { this.customerId = customerId; }
+    public UUID getEmploymentId() { return employmentId; }
+    public void setEmploymentId(UUID employmentId) { this.employmentId = employmentId; }
     public LocalDateTime getSaleDate() { return saleDate; }
     public void setSaleDate(LocalDateTime saleDate) { this.saleDate = saleDate; }
     public BigDecimal getTotal() { return total; }

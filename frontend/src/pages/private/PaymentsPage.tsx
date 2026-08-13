@@ -11,16 +11,17 @@ import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
-import { MOCK_USER } from "../../data/dashboardMockData";
+import { useCurrentUser } from "../../contexts/AuthContext";
 import { MOCK_PAYMENTS, PAYMENT_STATS } from "../../data/paymentsMockData";
 import type { Payment } from "../../types/payment";
 
-const STATUS_FILTERS: Array<Payment["paymentStatus"] | "ALL"> = ["ALL", "COMPLETED", "PENDING", "FAILED", "REFUNDED"];
+const STATUS_FILTERS: Array<Payment["paymentStatus"] | "ALL"> = ["ALL", "CONFIRMED", "PENDING", "FAILED", "REFUNDED"];
 
 export default function PaymentsPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const canManage = canManageRecords(MOCK_USER.role);
+  const currentUser = useCurrentUser();
+  const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Payment["paymentStatus"] | "ALL">("ALL");
 

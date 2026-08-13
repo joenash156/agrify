@@ -17,5 +17,5 @@ public class CropDiseaseController {
     @GetMapping public List<CropDisease> findAll(){return service.findAll();}
     @GetMapping("/crop/{cropId}") public List<CropDisease> findByCrop(@PathVariable UUID cropId){return service.findByCrop(cropId);}
     @PostMapping @ResponseStatus(HttpStatus.CREATED) public CropDisease create(@RequestBody CropDiseaseDto dto){return service.create(dto);}
-    @DeleteMapping("/{cropId}/{diseaseId}") @ResponseStatus(HttpStatus.NO_CONTENT) public void delete(@PathVariable UUID cropId,@PathVariable UUID diseaseId){service.delete(cropId,diseaseId);}
+    @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void delete(@PathVariable UUID id){service.delete(id);}
 }
