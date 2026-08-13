@@ -12,6 +12,7 @@ import com.farmmanagement.security.jwt.JwtService;
 import com.farmmanagement.security.jwt.RefreshTokenUtil;
 import com.farmmanagement.service.RegistrationService;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -50,7 +51,7 @@ public class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public String register(@RequestBody RegisterDto dto) {
+    public String register(@Valid @RequestBody RegisterDto dto) {
         registrationService.register(dto);
         return "Registration successful. Sign in at /api/auth/login.";
     }
@@ -90,7 +91,7 @@ public class AuthController {
 
     @PutMapping("/change-password")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void changePassword(@RequestBody ChangePasswordDto dto, Authentication authentication) {
+    public void changePassword(@Valid @RequestBody ChangePasswordDto dto, Authentication authentication) {
         UserAccount account = userAccountDao.findByUsername(authentication.getName())
                 .orElseThrow(() -> new RuntimeException("Account not found"));
         if (!passwordEncoder.matches(dto.getCurrentPassword(), account.getPasswordHash())) {

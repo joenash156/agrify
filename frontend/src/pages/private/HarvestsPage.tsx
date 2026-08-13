@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faWheatAwn, faTractor, faCalendarDay } from "@fortawesome/free-solid-svg-icons";
+import { faWheatAwn, faTractor, faCalendarDay, faSeedling, faStar, faBoxesStacked } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { StatCard } from "../../components/dashboard/StatCard";
 import { StatusBadge } from "../../components/common/StatusBadge";
@@ -12,8 +12,12 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
-import { MOCK_HARVESTS, HARVEST_STATS } from "../../data/harvestsMockData";
+import { harvestService } from "../../services/harvestService";
+import { cropService } from "../../services/cropService";
+import { farmService } from "../../services/farmService";
+import { inventoryService } from "../../services/inventoryService";
 import type { Harvest } from "../../types/harvest";
+import type { StatCardData } from "../../types/dashboard";
 
 const GRADE_FILTERS: Array<Harvest["qualityGrade"] | "ALL"> = ["ALL", "PREMIUM", "STANDARD", "SUBSTANDARD"];
 
@@ -24,20 +28,60 @@ export default function HarvestsPage() {
   const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState<Harvest["qualityGrade"] | "ALL">("ALL");
+  const [harvests, setHarvests] = useState<Harvest[]>([]);
+  const [pendingStorageCount, setPendingStorageCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([harvestService.findAll(), cropService.findAll(), farmService.findAll(), inventoryService.findAll()])
+      .then(([harvestList, crops, farms, inventory]) => {
+        const cropById = new Map(crops.map((c) => [c.cropId, c]));
+        const farmNameById = new Map(farms.map((f) => [f.farmId, f.farmName]));
+        setHarvests(
+          harvestList.map((harvest) => {
+            const crop = cropById.get(harvest.cropId);
+            return {
+              ...harvest,
+              cropName: crop?.cropName ?? "Unknown Crop",
+              farmName: (crop && farmNameById.get(crop.farmId)) ?? "Unknown Farm",
+            };
+          })
+        );
+        const storedHarvestIds = new Set(inventory.map((i) => i.harvestId));
+        setPendingStorageCount(harvestList.filter((h) => !storedHarvestIds.has(h.harvestId)).length);
+      })
+      .catch(() => setHarvests([]))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
   const subText = isDark ? "text-zinc-500" : "text-zinc-500";
 
+  const stats: StatCardData[] = useMemo(() => {
+    const now = new Date();
+    const thisMonth = harvests.filter((h) => {
+      const d = new Date(h.harvestDate);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    const totalYield = harvests.reduce((sum, h) => sum + h.quantity, 0);
+    return [
+      { id: "total-harvests", title: "Harvests This Month", value: thisMonth.length, trend: "neutral", subtitle: `${thisMonth.reduce((s, h) => s + h.quantity, 0).toLocaleString()} kg total yield`, icon: faWheatAwn, accentColor: "orange" },
+      { id: "total-yield", title: "Total Yield (YTD)", value: `${totalYield.toLocaleString()} kg`, trend: "neutral", subtitle: "Across all farms", icon: faSeedling, accentColor: "teal" },
+      { id: "premium", title: "Premium Grade", value: harvests.filter((h) => h.qualityGrade === "PREMIUM").length, trend: "neutral", subtitle: "Top quality harvests", icon: faStar, accentColor: "purple" },
+      { id: "pending", title: "Pending Storage", value: pendingStorageCount, trend: "neutral", subtitle: "Not yet in inventory", icon: faBoxesStacked, accentColor: "blue" },
+    ];
+  }, [harvests, pendingStorageCount]);
+
   const filteredHarvests = useMemo(() => {
-    return MOCK_HARVESTS.filter((harvest) => {
+    return harvests.filter((harvest) => {
       const matchesSearch =
         harvest.cropName.toLowerCase().includes(search.toLowerCase()) ||
         harvest.farmName.toLowerCase().includes(search.toLowerCase());
       const matchesGrade = gradeFilter === "ALL" || harvest.qualityGrade === gradeFilter;
       return matchesSearch && matchesGrade;
     });
-  }, [search, gradeFilter]);
+  }, [harvests, search, gradeFilter]);
 
   return (
     <>
@@ -50,7 +94,7 @@ export default function HarvestsPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {HARVEST_STATS.map((stat) => (
+        {stats.map((stat) => (
           <StatCard key={stat.id} {...stat} />
         ))}
       </div>
@@ -129,7 +173,7 @@ export default function HarvestsPage() {
             </tbody>
           </table>
         </div>
-        {filteredHarvests.length === 0 && <EmptyState title="No harvest records found" />}
+        {!isLoading && filteredHarvests.length === 0 && <EmptyState title="No harvest records found" />}
       </div>
 
       {/* Mobile cards */}
@@ -149,7 +193,7 @@ export default function HarvestsPage() {
             ]}
           />
         ))}
-        {filteredHarvests.length === 0 && <EmptyState title="No harvest records found" />}
+        {!isLoading && filteredHarvests.length === 0 && <EmptyState title="No harvest records found" />}
       </div>
     </>
   );

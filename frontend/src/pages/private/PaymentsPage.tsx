@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCreditCard, faCalendarDay } from "@fortawesome/free-solid-svg-icons";
+import { faCreditCard, faCalendarDay, faReceipt, faTriangleExclamation, faRotateLeft } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { StatCard } from "../../components/dashboard/StatCard";
 import { StatusBadge } from "../../components/common/StatusBadge";
@@ -12,8 +12,10 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
-import { MOCK_PAYMENTS, PAYMENT_STATS } from "../../data/paymentsMockData";
+import { paymentService } from "../../services/paymentService";
+import { saleService } from "../../services/saleService";
 import type { Payment } from "../../types/payment";
+import type { StatCardData } from "../../types/dashboard";
 
 const STATUS_FILTERS: Array<Payment["paymentStatus"] | "ALL"> = ["ALL", "CONFIRMED", "PENDING", "FAILED", "REFUNDED"];
 
@@ -24,20 +26,54 @@ export default function PaymentsPage() {
   const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Payment["paymentStatus"] | "ALL">("ALL");
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([paymentService.findAll(), saleService.findAll()])
+      .then(([paymentList, sales]) => {
+        const customerNameBySaleId = new Map(sales.map((s) => [s.saleId, s.customerName]));
+        setPayments(
+          paymentList.map((payment) => ({
+            ...payment,
+            customerName: customerNameBySaleId.get(payment.saleId) ?? "Walk-in Customer",
+          }))
+        );
+      })
+      .catch(() => setPayments([]))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
   const subText = isDark ? "text-zinc-500" : "text-zinc-500";
 
+  const stats: StatCardData[] = useMemo(() => {
+    const now = new Date();
+    const collectedThisMonth = payments
+      .filter((p) => {
+        const d = new Date(p.paymentDate);
+        return p.paymentStatus === "CONFIRMED" && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      })
+      .reduce((sum, p) => sum + p.amount, 0);
+    const pending = payments.filter((p) => p.paymentStatus === "PENDING");
+    return [
+      { id: "collected", title: "Collected This Month", value: `₵ ${collectedThisMonth.toLocaleString()}`, trend: "neutral", subtitle: "Across all methods", icon: faCreditCard, accentColor: "teal" },
+      { id: "outstanding", title: "Outstanding Payments", value: `₵ ${pending.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`, trend: "neutral", subtitle: `${pending.length} pending settlement${pending.length === 1 ? "" : "s"}`, icon: faReceipt, accentColor: "rose" },
+      { id: "failed", title: "Failed Payments", value: payments.filter((p) => p.paymentStatus === "FAILED").length, trend: "neutral", subtitle: "Needs retry or follow-up", icon: faTriangleExclamation, accentColor: "amber" },
+      { id: "refunded", title: "Refunded", value: payments.filter((p) => p.paymentStatus === "REFUNDED").length, trend: "neutral", subtitle: "All time", icon: faRotateLeft, accentColor: "blue" },
+    ];
+  }, [payments]);
+
   const filteredPayments = useMemo(() => {
-    return MOCK_PAYMENTS.filter((payment) => {
+    return payments.filter((payment) => {
       const matchesSearch =
         payment.customerName.toLowerCase().includes(search.toLowerCase()) ||
         payment.saleId.toLowerCase().includes(search.toLowerCase());
       const matchesStatus = statusFilter === "ALL" || payment.paymentStatus === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [search, statusFilter]);
+  }, [payments, search, statusFilter]);
 
   return (
     <>
@@ -50,7 +86,7 @@ export default function PaymentsPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {PAYMENT_STATS.map((stat) => (
+        {stats.map((stat) => (
           <StatCard key={stat.id} {...stat} />
         ))}
       </div>
@@ -126,7 +162,7 @@ export default function PaymentsPage() {
             </tbody>
           </table>
         </div>
-        {filteredPayments.length === 0 && <EmptyState title="No payments found" />}
+        {!isLoading && filteredPayments.length === 0 && <EmptyState title="No payments found" />}
       </div>
 
       {/* Mobile cards */}
@@ -147,7 +183,7 @@ export default function PaymentsPage() {
             ]}
           />
         ))}
-        {filteredPayments.length === 0 && <EmptyState title="No payments found" />}
+        {!isLoading && filteredPayments.length === 0 && <EmptyState title="No payments found" />}
       </div>
     </>
   );

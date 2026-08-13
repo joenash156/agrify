@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faReceipt, faCalendarDay, faUser } from "@fortawesome/free-solid-svg-icons";
+import { faReceipt, faCalendarDay, faUser, faCartShopping, faClock, faTriangleExclamation } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useCurrentUser } from "../../contexts/AuthContext";
 import { StatCard } from "../../components/dashboard/StatCard";
@@ -12,9 +12,9 @@ import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageOwnedRecord, canCreateSales } from "../../utils/permissions";
-import { SALES_STATS } from "../../data/salesMockData";
 import { saleService } from "../../services/saleService";
 import type { Sale } from "../../types/sale";
+import type { StatCardData } from "../../types/dashboard";
 
 const STATUS_FILTERS: Array<Sale["saleStatus"] | "ALL"> = ["ALL", "PAID", "PARTIALLY_PAID", "UNPAID", "CANCELLED"];
 
@@ -41,6 +41,24 @@ export default function SalesPage() {
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
   const subText = isDark ? "text-zinc-500" : "text-zinc-500";
 
+  const stats: StatCardData[] = useMemo(() => {
+    const now = new Date();
+    const salesThisMonth = sales.filter((s) => {
+      const d = new Date(s.saleDate);
+      return (
+        (s.saleStatus === "PAID" || s.saleStatus === "PARTIALLY_PAID") &&
+        d.getMonth() === now.getMonth() &&
+        d.getFullYear() === now.getFullYear()
+      );
+    });
+    return [
+      { id: "sales", title: "Sales This Month", value: `₵ ${salesThisMonth.reduce((sum, s) => sum + s.total, 0).toLocaleString()}`, trend: "neutral", subtitle: `${salesThisMonth.length} completed order${salesThisMonth.length === 1 ? "" : "s"}`, icon: faReceipt, accentColor: "teal" },
+      { id: "orders", title: "Total Orders", value: sales.length, trend: "neutral", subtitle: "All time", icon: faCartShopping, accentColor: "blue" },
+      { id: "pending", title: "Unpaid Orders", value: sales.filter((s) => s.saleStatus === "UNPAID").length, trend: "neutral", subtitle: "Awaiting payment", icon: faClock, accentColor: "amber" },
+      { id: "overdue", title: "Partially Paid Orders", value: sales.filter((s) => s.saleStatus === "PARTIALLY_PAID").length, trend: "neutral", subtitle: "Requires follow-up", icon: faTriangleExclamation, accentColor: "rose" },
+    ];
+  }, [sales]);
+
   const filteredSales = useMemo(() => {
     return sales.filter((sale) => {
       const matchesSearch =
@@ -62,7 +80,7 @@ export default function SalesPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {SALES_STATS.map((stat) => (
+        {stats.map((stat) => (
           <StatCard key={stat.id} {...stat} />
         ))}
       </div>

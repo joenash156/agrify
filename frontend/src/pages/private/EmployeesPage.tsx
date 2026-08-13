@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faUsers, faTractor, faCalendarDay } from "@fortawesome/free-solid-svg-icons";
+import { faUsers, faTractor, faCalendarDay, faCircleCheck, faClock, faCreditCard } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { StatCard } from "../../components/dashboard/StatCard";
 import { StatusBadge } from "../../components/common/StatusBadge";
@@ -12,8 +12,11 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
-import { MOCK_EMPLOYEES, EMPLOYEE_STATS } from "../../data/employeesMockData";
+import { employeeService } from "../../services/employeeService";
+import { appUserService } from "../../services/appUserService";
+import { farmService } from "../../services/farmService";
 import type { Employee } from "../../types/employee";
+import type { StatCardData } from "../../types/dashboard";
 
 const STATUS_FILTERS: Array<Employee["employmentStatus"] | "ALL"> = [
   "ALL",
@@ -30,13 +33,54 @@ export default function EmployeesPage() {
   const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Employee["employmentStatus"] | "ALL">("ALL");
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([employeeService.findAll(), appUserService.findAll(), farmService.findAll()])
+      .then(([employments, users, farms]) => {
+        const userById = new Map(users.map((u) => [u.userId, u]));
+        const farmNameById = new Map(farms.map((f) => [f.farmId, f.farmName]));
+        setEmployees(
+          employments.map((employment) => {
+            const user = userById.get(employment.userId);
+            return {
+              employmentId: employment.employmentId,
+              userId: employment.userId,
+              firstName: user?.firstName ?? "Unknown",
+              lastName: user?.lastName ?? "User",
+              email: user?.email ?? "—",
+              phoneNumber: user?.phoneNumber ?? "—",
+              farmName: farmNameById.get(employment.farmId) ?? "Unknown Farm",
+              jobTitle: employment.role,
+              salary: employment.salary,
+              hireDate: employment.hireDate,
+              employmentStatus: employment.employmentStatus,
+            };
+          })
+        );
+      })
+      .catch(() => setEmployees([]))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
   const subText = isDark ? "text-zinc-500" : "text-zinc-500";
 
+  const stats: StatCardData[] = useMemo(() => {
+    const active = employees.filter((e) => e.employmentStatus === "ACTIVE");
+    const payroll = active.reduce((sum, e) => sum + e.salary, 0);
+    return [
+      { id: "total", title: "Total Employees", value: employees.length, trend: "neutral", subtitle: "Across all farms", icon: faUsers, accentColor: "blue" },
+      { id: "active", title: "Active Employees", value: active.length, trend: "neutral", subtitle: "Currently employed", icon: faCircleCheck, accentColor: "teal" },
+      { id: "on-leave", title: "On Leave", value: employees.filter((e) => e.employmentStatus === "ON_LEAVE").length, trend: "neutral", subtitle: "Temporarily away", icon: faClock, accentColor: "amber" },
+      { id: "payroll", title: "Monthly Payroll", value: `₵ ${payroll.toLocaleString()}`, trend: "neutral", subtitle: "Combined active salaries", icon: faCreditCard, accentColor: "purple" },
+    ];
+  }, [employees]);
+
   const filteredEmployees = useMemo(() => {
-    return MOCK_EMPLOYEES.filter((employee) => {
+    return employees.filter((employee) => {
       const fullName = `${employee.firstName} ${employee.lastName}`.toLowerCase();
       const matchesSearch =
         fullName.includes(search.toLowerCase()) ||
@@ -45,7 +89,7 @@ export default function EmployeesPage() {
       const matchesStatus = statusFilter === "ALL" || employee.employmentStatus === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [search, statusFilter]);
+  }, [employees, search, statusFilter]);
 
   return (
     <>
@@ -58,7 +102,7 @@ export default function EmployeesPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {EMPLOYEE_STATS.map((stat) => (
+        {stats.map((stat) => (
           <StatCard key={stat.id} {...stat} />
         ))}
       </div>
@@ -142,7 +186,7 @@ export default function EmployeesPage() {
             </tbody>
           </table>
         </div>
-        {filteredEmployees.length === 0 && <EmptyState title="No employees found" />}
+        {!isLoading && filteredEmployees.length === 0 && <EmptyState title="No employees found" />}
       </div>
 
       {/* Mobile cards */}
@@ -162,7 +206,7 @@ export default function EmployeesPage() {
             ]}
           />
         ))}
-        {filteredEmployees.length === 0 && <EmptyState title="No employees found" />}
+        {!isLoading && filteredEmployees.length === 0 && <EmptyState title="No employees found" />}
       </div>
     </>
   );

@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBug, faTractor, faCalendarDay } from "@fortawesome/free-solid-svg-icons";
+import { faBug, faTractor, faCalendarDay, faTriangleExclamation, faCalendarCheck } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { StatCard } from "../../components/dashboard/StatCard";
 import { StatusBadge } from "../../components/common/StatusBadge";
@@ -12,8 +12,12 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
-import { MOCK_CROP_DISEASES, DISEASE_STATS } from "../../data/diseasesMockData";
-import type { DiseaseSeverity } from "../../types/disease";
+import { cropDiseaseService } from "../../services/cropDiseaseService";
+import { diseaseCatalogService } from "../../services/diseaseCatalogService";
+import { cropService } from "../../services/cropService";
+import { farmService } from "../../services/farmService";
+import type { CropDiseaseRecord, DiseaseSeverity } from "../../types/disease";
+import type { StatCardData } from "../../types/dashboard";
 
 const SEVERITY_FILTERS: Array<DiseaseSeverity | "ALL"> = ["ALL", "LOW", "MEDIUM", "HIGH", "CRITICAL"];
 
@@ -24,13 +28,56 @@ export default function DiseasesPage() {
   const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState<DiseaseSeverity | "ALL">("ALL");
+  const [records, setRecords] = useState<CropDiseaseRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      cropDiseaseService.findAll(),
+      diseaseCatalogService.findAll(),
+      cropService.findAll(),
+      farmService.findAll(),
+    ])
+      .then(([incidents, diseases, crops, farms]) => {
+        const diseaseNameById = new Map(diseases.map((d) => [d.diseaseId, d.diseaseName]));
+        const cropById = new Map(crops.map((c) => [c.cropId, c]));
+        const farmNameById = new Map(farms.map((f) => [f.farmId, f.farmName]));
+        setRecords(
+          incidents.map((record) => {
+            const crop = cropById.get(record.cropId);
+            return {
+              ...record,
+              cropName: crop?.cropName ?? "Unknown Crop",
+              farmName: (crop && farmNameById.get(crop.farmId)) ?? "Unknown Farm",
+              diseaseName: diseaseNameById.get(record.diseaseId) ?? "Unknown Disease",
+            };
+          })
+        );
+      })
+      .catch(() => setRecords([]))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
   const subText = isDark ? "text-zinc-500" : "text-zinc-500";
 
+  const stats: StatCardData[] = useMemo(() => {
+    const now = new Date();
+    const detectedThisMonth = records.filter((r) => {
+      const d = new Date(r.detectedDate);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }).length;
+    return [
+      { id: "active-cases", title: "Active Cases", value: records.length, trend: "neutral", subtitle: "Across all farms", icon: faBug, accentColor: "rose" },
+      { id: "critical", title: "Critical Severity", value: records.filter((r) => r.severity === "CRITICAL").length, trend: "neutral", subtitle: "Needs immediate action", icon: faTriangleExclamation, accentColor: "rose" },
+      { id: "high", title: "High Severity", value: records.filter((r) => r.severity === "HIGH").length, trend: "neutral", subtitle: "Under close monitoring", icon: faTriangleExclamation, accentColor: "amber" },
+      { id: "detected-this-month", title: "Detected This Month", value: detectedThisMonth, trend: "neutral", subtitle: "New cases logged", icon: faCalendarCheck, accentColor: "teal" },
+    ];
+  }, [records]);
+
   const filteredRecords = useMemo(() => {
-    return MOCK_CROP_DISEASES.filter((record) => {
+    return records.filter((record) => {
       const matchesSearch =
         record.cropName.toLowerCase().includes(search.toLowerCase()) ||
         record.diseaseName.toLowerCase().includes(search.toLowerCase()) ||
@@ -38,7 +85,7 @@ export default function DiseasesPage() {
       const matchesSeverity = severityFilter === "ALL" || record.severity === severityFilter;
       return matchesSearch && matchesSeverity;
     });
-  }, [search, severityFilter]);
+  }, [records, search, severityFilter]);
 
   return (
     <>
@@ -51,7 +98,7 @@ export default function DiseasesPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {DISEASE_STATS.map((stat) => (
+        {stats.map((stat) => (
           <StatCard key={stat.id} {...stat} />
         ))}
       </div>
@@ -131,7 +178,7 @@ export default function DiseasesPage() {
             </tbody>
           </table>
         </div>
-        {filteredRecords.length === 0 && <EmptyState title="No disease records found" />}
+        {!isLoading && filteredRecords.length === 0 && <EmptyState title="No disease records found" />}
       </div>
 
       {/* Mobile cards */}
@@ -151,7 +198,7 @@ export default function DiseasesPage() {
             ]}
           />
         ))}
-        {filteredRecords.length === 0 && <EmptyState title="No disease records found" />}
+        {!isLoading && filteredRecords.length === 0 && <EmptyState title="No disease records found" />}
       </div>
     </>
   );

@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faFlask } from "@fortawesome/free-solid-svg-icons";
+import { faFlask, faBoxesStacked, faTriangleExclamation, faReceipt } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { StatCard } from "../../components/dashboard/StatCard";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -10,7 +10,9 @@ import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
-import { MOCK_FERTILIZERS, FERTILIZER_STATS } from "../../data/fertilizersMockData";
+import { fertilizerService } from "../../services/fertilizerService";
+import type { Fertilizer } from "../../types/fertilizer";
+import type { StatCardData } from "../../types/dashboard";
 
 const TYPE_FILTERS = ["ALL", "Compound", "Nitrogen", "Potassium", "Phosphorus", "Organic"] as const;
 
@@ -21,6 +23,16 @@ export default function FertilizersPage() {
   const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<(typeof TYPE_FILTERS)[number]>("ALL");
+  const [fertilizers, setFertilizers] = useState<Fertilizer[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fertilizerService
+      .findAll()
+      .then(setFertilizers)
+      .catch(() => setFertilizers([]))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
@@ -28,13 +40,24 @@ export default function FertilizersPage() {
     ? "bg-zinc-800 text-zinc-300 border-zinc-700"
     : "bg-zinc-100 text-zinc-700 border-zinc-200";
 
+  const stats: StatCardData[] = useMemo(() => {
+    const totalStock = fertilizers.reduce((sum, f) => sum + f.quantity, 0);
+    const totalValue = fertilizers.reduce((sum, f) => sum + f.unitPrice * f.quantity, 0);
+    return [
+      { id: "types", title: "Fertilizer Types", value: fertilizers.length, trend: "neutral", subtitle: "Distinct products in stock", icon: faFlask, accentColor: "teal" },
+      { id: "total-qty", title: "Total Stock", value: `${totalStock.toLocaleString()} kg`, trend: "neutral", subtitle: "Across all warehouses", icon: faBoxesStacked, accentColor: "blue" },
+      { id: "low-stock", title: "Low Stock Items", value: fertilizers.filter((f) => f.quantity < 100).length, trend: "neutral", subtitle: "Below 100kg remaining", icon: faTriangleExclamation, accentColor: "rose" },
+      { id: "value", title: "Inventory Value", value: `₵ ${totalValue.toLocaleString()}`, trend: "neutral", subtitle: "Estimated stock value", icon: faReceipt, accentColor: "purple" },
+    ];
+  }, [fertilizers]);
+
   const filteredFertilizers = useMemo(() => {
-    return MOCK_FERTILIZERS.filter((item) => {
+    return fertilizers.filter((item) => {
       const matchesSearch = item.fertilizerName.toLowerCase().includes(search.toLowerCase());
       const matchesType = typeFilter === "ALL" || item.fertilizerType === typeFilter;
       return matchesSearch && matchesType;
     });
-  }, [search, typeFilter]);
+  }, [fertilizers, search, typeFilter]);
 
   return (
     <>
@@ -47,7 +70,7 @@ export default function FertilizersPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {FERTILIZER_STATS.map((stat) => (
+        {stats.map((stat) => (
           <StatCard key={stat.id} {...stat} />
         ))}
       </div>
@@ -120,7 +143,7 @@ export default function FertilizersPage() {
             </tbody>
           </table>
         </div>
-        {filteredFertilizers.length === 0 && <EmptyState title="No fertilizers found" />}
+        {!isLoading && filteredFertilizers.length === 0 && <EmptyState title="No fertilizers found" />}
       </div>
 
       {/* Mobile cards */}
@@ -143,7 +166,7 @@ export default function FertilizersPage() {
             ]}
           />
         ))}
-        {filteredFertilizers.length === 0 && <EmptyState title="No fertilizers found" />}
+        {!isLoading && filteredFertilizers.length === 0 && <EmptyState title="No fertilizers found" />}
       </div>
     </>
   );

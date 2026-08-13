@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faWrench, faTractor, faCalendarDay } from "@fortawesome/free-solid-svg-icons";
+import { faWrench, faTractor, faCalendarDay, faCircleCheck, faScrewdriverWrench } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { StatCard } from "../../components/dashboard/StatCard";
 import { StatusBadge } from "../../components/common/StatusBadge";
@@ -12,8 +12,10 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
-import { MOCK_EQUIPMENT, EQUIPMENT_STATS } from "../../data/equipmentMockData";
+import { equipmentService } from "../../services/equipmentService";
+import { farmService } from "../../services/farmService";
 import type { Equipment } from "../../types/equipment";
+import type { StatCardData } from "../../types/dashboard";
 
 const STATUS_FILTERS: Array<Equipment["equipmentStatus"] | "ALL"> = [
   "ALL",
@@ -31,13 +33,40 @@ export default function EquipmentPage() {
   const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Equipment["equipmentStatus"] | "ALL">("ALL");
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([equipmentService.findAll(), farmService.findAll()])
+      .then(([equipmentList, farms]) => {
+        const farmNameById = new Map(farms.map((f) => [f.farmId, f.farmName]));
+        setEquipment(
+          equipmentList.map((item) => ({
+            ...item,
+            farmName: farmNameById.get(item.farmId) ?? "Unknown Farm",
+          }))
+        );
+      })
+      .catch(() => setEquipment([]))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
   const subText = isDark ? "text-zinc-500" : "text-zinc-500";
 
+  const stats: StatCardData[] = useMemo(() => {
+    const totalValue = equipment.reduce((sum, e) => sum + e.purchaseCost, 0);
+    return [
+      { id: "total", title: "Total Equipment", value: equipment.length, trend: "neutral", subtitle: "Registered assets", icon: faWrench, accentColor: "teal" },
+      { id: "operational", title: "Operational", value: equipment.filter((e) => e.equipmentStatus === "AVAILABLE" || e.equipmentStatus === "IN_USE").length, trend: "neutral", subtitle: "Ready for use", icon: faCircleCheck, accentColor: "blue" },
+      { id: "maintenance", title: "In Maintenance", value: equipment.filter((e) => e.equipmentStatus === "MAINTENANCE").length, trend: "neutral", subtitle: "Currently serviced", icon: faScrewdriverWrench, accentColor: "amber" },
+      { id: "value", title: "Total Asset Value", value: `₵ ${totalValue.toLocaleString()}`, trend: "neutral", subtitle: "Combined purchase cost", icon: faTractor, accentColor: "purple" },
+    ];
+  }, [equipment]);
+
   const filteredEquipment = useMemo(() => {
-    return MOCK_EQUIPMENT.filter((item) => {
+    return equipment.filter((item) => {
       const matchesSearch =
         item.equipmentName.toLowerCase().includes(search.toLowerCase()) ||
         item.equipmentType.toLowerCase().includes(search.toLowerCase()) ||
@@ -45,7 +74,7 @@ export default function EquipmentPage() {
       const matchesStatus = statusFilter === "ALL" || item.equipmentStatus === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [search, statusFilter]);
+  }, [equipment, search, statusFilter]);
 
   return (
     <>
@@ -58,7 +87,7 @@ export default function EquipmentPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {EQUIPMENT_STATS.map((stat) => (
+        {stats.map((stat) => (
           <StatCard key={stat.id} {...stat} />
         ))}
       </div>
@@ -138,7 +167,7 @@ export default function EquipmentPage() {
             </tbody>
           </table>
         </div>
-        {filteredEquipment.length === 0 && <EmptyState title="No equipment found" />}
+        {!isLoading && filteredEquipment.length === 0 && <EmptyState title="No equipment found" />}
       </div>
 
       {/* Mobile cards */}
@@ -158,7 +187,7 @@ export default function EquipmentPage() {
             ]}
           />
         ))}
-        {filteredEquipment.length === 0 && <EmptyState title="No equipment found" />}
+        {!isLoading && filteredEquipment.length === 0 && <EmptyState title="No equipment found" />}
       </div>
     </>
   );

@@ -1,10 +1,12 @@
-import { Outlet, Navigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { SidebarProvider, useSidebar } from "../contexts/SidebarContext";
 import { NotificationsProvider } from "../contexts/NotificationsContext";
 import { useAuth, useCurrentUser } from "../contexts/AuthContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { Sidebar } from "../components/layout/Sidebar";
 import { DashboardTopBar } from "../components/layout/DashboardTopBar";
+import { AnimatedOutlet } from "../components/layout/AnimatedOutlet";
+import { useScrollToTop } from "../hooks/useScrollToTop";
 import type { UserProfile } from "../types/user";
 
 function PrivateShell() {
@@ -12,6 +14,7 @@ function PrivateShell() {
   const isDark = theme === "dark";
   const { isCollapsed, isOpen, toggleCollapsed, toggleOpen, closeSidebar } = useSidebar();
   const authUser = useCurrentUser();
+  const scrollRef = useScrollToTop<HTMLElement>();
 
   const user: UserProfile = {
     id: authUser.userId,
@@ -34,8 +37,8 @@ function PrivateShell() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <DashboardTopBar user={user} onOpenMobileSidebar={toggleOpen} />
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-          <Outlet />
+        <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+          <AnimatedOutlet />
         </main>
       </div>
     </div>

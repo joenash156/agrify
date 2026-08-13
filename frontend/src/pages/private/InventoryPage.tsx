@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBoxesStacked, faLocationDot } from "@fortawesome/free-solid-svg-icons";
+import { faBoxesStacked, faLocationDot, faWarehouse, faScaleBalanced } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { StatCard } from "../../components/dashboard/StatCard";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -10,7 +10,9 @@ import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
-import { MOCK_INVENTORY, INVENTORY_STATS } from "../../data/inventoryMockData";
+import { inventoryService } from "../../services/inventoryService";
+import type { Inventory } from "../../types/inventory";
+import type { StatCardData } from "../../types/dashboard";
 
 const LOCATION_FILTERS = ["ALL", "Warehouse A", "Warehouse B", "Warehouse C"] as const;
 
@@ -21,18 +23,40 @@ export default function InventoryPage() {
   const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [locationFilter, setLocationFilter] = useState<(typeof LOCATION_FILTERS)[number]>("ALL");
+  const [inventory, setInventory] = useState<Inventory[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    inventoryService
+      .findAll()
+      .then(setInventory)
+      .catch(() => setInventory([]))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
   const subText = isDark ? "text-zinc-500" : "text-zinc-500";
 
+  const stats: StatCardData[] = useMemo(() => {
+    const totalStored = inventory.reduce((sum, i) => sum + i.quantity, 0);
+    const locations = new Set(inventory.map((i) => i.storageLocation.split(" - ")[0]));
+    const avgBatch = inventory.length > 0 ? Math.round(totalStored / inventory.length) : 0;
+    return [
+      { id: "items", title: "Inventory Items", value: inventory.length, trend: "neutral", subtitle: "Stored batches", icon: faBoxesStacked, accentColor: "purple" },
+      { id: "total-qty", title: "Total Stored", value: `${totalStored.toLocaleString()} kg`, trend: "neutral", subtitle: "Combined weight in storage", icon: faWarehouse, accentColor: "teal" },
+      { id: "locations", title: "Storage Locations", value: locations.size, trend: "neutral", subtitle: "Active warehouses", icon: faLocationDot, accentColor: "blue" },
+      { id: "avg-batch", title: "Avg. Batch Size", value: `${avgBatch.toLocaleString()} kg`, trend: "neutral", subtitle: "Per stored batch", icon: faScaleBalanced, accentColor: "amber" },
+    ];
+  }, [inventory]);
+
   const filteredInventory = useMemo(() => {
-    return MOCK_INVENTORY.filter((item) => {
+    return inventory.filter((item) => {
       const matchesSearch = item.itemName.toLowerCase().includes(search.toLowerCase());
       const matchesLocation = locationFilter === "ALL" || item.storageLocation.startsWith(locationFilter);
       return matchesSearch && matchesLocation;
     });
-  }, [search, locationFilter]);
+  }, [inventory, search, locationFilter]);
 
   return (
     <>
@@ -45,7 +69,7 @@ export default function InventoryPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {INVENTORY_STATS.map((stat) => (
+        {stats.map((stat) => (
           <StatCard key={stat.id} {...stat} />
         ))}
       </div>
@@ -116,7 +140,7 @@ export default function InventoryPage() {
             </tbody>
           </table>
         </div>
-        {filteredInventory.length === 0 && <EmptyState title="No inventory items found" />}
+        {!isLoading && filteredInventory.length === 0 && <EmptyState title="No inventory items found" />}
       </div>
 
       {/* Mobile cards */}
@@ -134,7 +158,7 @@ export default function InventoryPage() {
             ]}
           />
         ))}
-        {filteredInventory.length === 0 && <EmptyState title="No inventory items found" />}
+        {!isLoading && filteredInventory.length === 0 && <EmptyState title="No inventory items found" />}
       </div>
     </>
   );

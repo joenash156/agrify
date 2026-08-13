@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faSeedling, faTractor, faCalendarDay } from "@fortawesome/free-solid-svg-icons";
+import { faSeedling, faTractor, faCalendarDay, faWheatAwn, faBug, faLeaf } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { StatCard } from "../../components/dashboard/StatCard";
 import { StatusBadge } from "../../components/common/StatusBadge";
@@ -12,8 +12,10 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
-import { MOCK_CROPS, CROP_STATS } from "../../data/cropsMockData";
+import { cropService } from "../../services/cropService";
+import { farmService } from "../../services/farmService";
 import type { Crop } from "../../types/crop";
+import type { StatCardData } from "../../types/dashboard";
 
 const STATUS_FILTERS: Array<Crop["cropStatus"] | "ALL"> = [
   "ALL",
@@ -31,13 +33,40 @@ export default function CropsPage() {
   const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Crop["cropStatus"] | "ALL">("ALL");
+  const [crops, setCrops] = useState<Crop[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([cropService.findAll(), farmService.findAll()])
+      .then(([cropList, farms]) => {
+        const farmNameById = new Map(farms.map((f) => [f.farmId, f.farmName]));
+        setCrops(
+          cropList.map((crop) => ({
+            ...crop,
+            farmName: farmNameById.get(crop.farmId) ?? "Unknown Farm",
+          }))
+        );
+      })
+      .catch(() => setCrops([]))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
   const subText = isDark ? "text-zinc-500" : "text-zinc-500";
 
+  const stats: StatCardData[] = useMemo(() => {
+    const varieties = new Set(crops.map((c) => c.cropVariety)).size;
+    return [
+      { id: "active-crops", title: "Active Crops", value: crops.filter((c) => c.cropStatus === "GROWING").length, trend: "neutral", subtitle: "Currently growing", icon: faSeedling, accentColor: "teal" },
+      { id: "ready-harvest", title: "Ready to Harvest", value: crops.filter((c) => c.cropStatus === "READY").length, trend: "neutral", subtitle: "Awaiting harvest", icon: faWheatAwn, accentColor: "amber" },
+      { id: "diseased", title: "Diseased Crops", value: crops.filter((c) => c.cropStatus === "DISEASED").length, trend: "neutral", subtitle: "Requiring treatment", icon: faBug, accentColor: "rose" },
+      { id: "varieties", title: "Total Varieties", value: varieties, trend: "neutral", subtitle: "Unique crop varieties", icon: faLeaf, accentColor: "purple" },
+    ];
+  }, [crops]);
+
   const filteredCrops = useMemo(() => {
-    return MOCK_CROPS.filter((crop) => {
+    return crops.filter((crop) => {
       const matchesSearch =
         crop.cropName.toLowerCase().includes(search.toLowerCase()) ||
         crop.cropVariety.toLowerCase().includes(search.toLowerCase()) ||
@@ -45,7 +74,7 @@ export default function CropsPage() {
       const matchesStatus = statusFilter === "ALL" || crop.cropStatus === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [search, statusFilter]);
+  }, [crops, search, statusFilter]);
 
   return (
     <>
@@ -58,7 +87,7 @@ export default function CropsPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {CROP_STATS.map((stat) => (
+        {stats.map((stat) => (
           <StatCard key={stat.id} {...stat} />
         ))}
       </div>
@@ -140,7 +169,7 @@ export default function CropsPage() {
             </tbody>
           </table>
         </div>
-        {filteredCrops.length === 0 && <EmptyState title="No crops found" />}
+        {!isLoading && filteredCrops.length === 0 && <EmptyState title="No crops found" />}
       </div>
 
       {/* Mobile cards */}
@@ -160,7 +189,7 @@ export default function CropsPage() {
             ]}
           />
         ))}
-        {filteredCrops.length === 0 && <EmptyState title="No crops found" />}
+        {!isLoading && filteredCrops.length === 0 && <EmptyState title="No crops found" />}
       </div>
     </>
   );

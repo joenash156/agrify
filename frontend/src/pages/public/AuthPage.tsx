@@ -4,7 +4,6 @@ import {
   faSeedling,
   faChartLine,
   faTractor,
-  faShieldHalved,
 } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { HamburgerMenu } from "../../components/common/HamburgerMenu";
@@ -85,10 +84,10 @@ export default function AuthPage() {
         {/* Bottom Footer info */}
         <div className="relative z-20 flex items-center justify-between text-xs text-zinc-400 pt-6 border-t border-zinc-800/60">
           <span>&copy; {new Date().getFullYear()} Agrify Systems Inc.</span>
-          <span className="flex items-center gap-1.5">
+          {/* <span className="flex items-center gap-1.5">
             <FontAwesomeIcon icon={faShieldHalved} className="w-3.5 h-3.5 text-teal-400" />
             Database Academic Project
-          </span>
+          </span> */}
         </div>
       </div>
 

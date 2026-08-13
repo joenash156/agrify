@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faLocationDot, faUsers, faSeedling, faTractor } from "@fortawesome/free-solid-svg-icons";
+import { faLocationDot, faUsers, faSeedling, faTractor, faMapLocationDot } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { StatCard } from "../../components/dashboard/StatCard";
 import { StatusBadge } from "../../components/common/StatusBadge";
@@ -12,8 +12,11 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
-import { MOCK_FARMS, FARM_STATS } from "../../data/farmsMockData";
+import { farmService } from "../../services/farmService";
+import { cropService } from "../../services/cropService";
+import { employeeService } from "../../services/employeeService";
 import type { Farm } from "../../types/farm";
+import type { StatCardData } from "../../types/dashboard";
 
 const STATUS_FILTERS: Array<Farm["farmStatus"] | "ALL"> = [
   "ALL",
@@ -30,20 +33,49 @@ export default function FarmsPage() {
   const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Farm["farmStatus"] | "ALL">("ALL");
+  const [farms, setFarms] = useState<Farm[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([farmService.findAll(), cropService.findAll(), employeeService.findAll()])
+      .then(([farmList, crops, employments]) => {
+        setFarms(
+          farmList.map((farm) => ({
+            ...farm,
+            cropCount: crops.filter((c) => c.farmId === farm.farmId).length,
+            employeeCount: employments.filter(
+              (e) => e.farmId === farm.farmId && e.employmentStatus === "ACTIVE"
+            ).length,
+          }))
+        );
+      })
+      .catch(() => setFarms([]))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
   const subText = isDark ? "text-zinc-500" : "text-zinc-500";
 
+  const stats: StatCardData[] = useMemo(() => {
+    const totalArea = farms.reduce((sum, f) => sum + f.size, 0);
+    return [
+      { id: "total-farms", title: "Total Farms", value: farms.length, subtitle: "Registered in the system", icon: faTractor, accentColor: "teal", trend: "neutral" },
+      { id: "active-farms", title: "Active Farms", value: farms.filter((f) => f.farmStatus === "ACTIVE").length, trend: "neutral", subtitle: "Currently operational", icon: faMapLocationDot, accentColor: "amber" },
+      { id: "total-employees", title: "Farm Employees", value: farms.reduce((sum, f) => sum + (f.employeeCount ?? 0), 0), trend: "neutral", subtitle: "Across all farms", icon: faUsers, accentColor: "blue" },
+      { id: "total-area", title: "Total Area", value: `${totalArea.toLocaleString()} ha`, subtitle: "Combined farm size", icon: faSeedling, accentColor: "purple", trend: "neutral" },
+    ];
+  }, [farms]);
+
   const filteredFarms = useMemo(() => {
-    return MOCK_FARMS.filter((farm) => {
+    return farms.filter((farm) => {
       const matchesSearch =
         farm.farmName.toLowerCase().includes(search.toLowerCase()) ||
         farm.location.toLowerCase().includes(search.toLowerCase());
       const matchesStatus = statusFilter === "ALL" || farm.farmStatus === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [search, statusFilter]);
+  }, [farms, search, statusFilter]);
 
   return (
     <>
@@ -56,7 +88,7 @@ export default function FarmsPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {FARM_STATS.map((stat) => (
+        {stats.map((stat) => (
           <StatCard key={stat.id} {...stat} />
         ))}
       </div>
@@ -144,7 +176,7 @@ export default function FarmsPage() {
             </tbody>
           </table>
         </div>
-        {filteredFarms.length === 0 && <EmptyState title="No farms found" />}
+        {!isLoading && filteredFarms.length === 0 && <EmptyState title="No farms found" />}
       </div>
 
       {/* Mobile cards */}
@@ -166,7 +198,7 @@ export default function FarmsPage() {
             ]}
           />
         ))}
-        {filteredFarms.length === 0 && <EmptyState title="No farms found" />}
+        {!isLoading && filteredFarms.length === 0 && <EmptyState title="No farms found" />}
       </div>
     </>
   );

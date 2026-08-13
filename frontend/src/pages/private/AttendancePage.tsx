@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faClipboardUser, faCalendarDay } from "@fortawesome/free-solid-svg-icons";
+import { faClipboardUser, faCalendarDay, faCircleCheck, faClock, faTriangleExclamation, faUserClock } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { StatCard } from "../../components/dashboard/StatCard";
 import { StatusBadge } from "../../components/common/StatusBadge";
@@ -12,8 +12,11 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
-import { MOCK_ATTENDANCE, ATTENDANCE_STATS } from "../../data/attendanceMockData";
+import { attendanceService } from "../../services/attendanceService";
+import { employeeService } from "../../services/employeeService";
+import { appUserService } from "../../services/appUserService";
 import type { Attendance } from "../../types/attendance";
+import type { StatCardData } from "../../types/dashboard";
 
 const STATUS_FILTERS: Array<Attendance["attendanceStatus"] | "ALL"> = ["ALL", "PRESENT", "LATE", "ABSENT", "LEAVE"];
 
@@ -24,18 +27,49 @@ export default function AttendancePage() {
   const canManage = canManageRecords(currentUser.role);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Attendance["attendanceStatus"] | "ALL">("ALL");
+  const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([attendanceService.findAll(), employeeService.findAll(), appUserService.findAll()])
+      .then(([records, employments, users]) => {
+        const userIdByEmploymentId = new Map(employments.map((e) => [e.employmentId, e.userId]));
+        const userById = new Map(users.map((u) => [u.userId, u]));
+        setAttendance(
+          records.map((record) => {
+            const userId = userIdByEmploymentId.get(record.employmentId);
+            const user = userId ? userById.get(userId) : undefined;
+            return {
+              ...record,
+              employeeName: user ? `${user.firstName} ${user.lastName}` : "Unknown Employee",
+            };
+          })
+        );
+      })
+      .catch(() => setAttendance([]))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
   const subText = isDark ? "text-zinc-500" : "text-zinc-500";
 
+  const stats: StatCardData[] = useMemo(() => {
+    return [
+      { id: "present", title: "Present", value: attendance.filter((a) => a.attendanceStatus === "PRESENT").length, trend: "neutral", subtitle: "All recorded days", icon: faCircleCheck, accentColor: "teal" },
+      { id: "late", title: "Late Check-ins", value: attendance.filter((a) => a.attendanceStatus === "LATE").length, trend: "neutral", subtitle: "All recorded days", icon: faClock, accentColor: "amber" },
+      { id: "absent", title: "Absent", value: attendance.filter((a) => a.attendanceStatus === "ABSENT").length, trend: "neutral", subtitle: "Unreported absences", icon: faTriangleExclamation, accentColor: "rose" },
+      { id: "leave", title: "On Leave", value: attendance.filter((a) => a.attendanceStatus === "LEAVE").length, trend: "neutral", subtitle: "Approved leave", icon: faUserClock, accentColor: "blue" },
+    ];
+  }, [attendance]);
+
   const filteredAttendance = useMemo(() => {
-    return MOCK_ATTENDANCE.filter((record) => {
+    return attendance.filter((record) => {
       const matchesSearch = record.employeeName.toLowerCase().includes(search.toLowerCase());
       const matchesStatus = statusFilter === "ALL" || record.attendanceStatus === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [search, statusFilter]);
+  }, [attendance, search, statusFilter]);
 
   return (
     <>
@@ -48,7 +82,7 @@ export default function AttendancePage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {ATTENDANCE_STATS.map((stat) => (
+        {stats.map((stat) => (
           <StatCard key={stat.id} {...stat} />
         ))}
       </div>
@@ -120,7 +154,7 @@ export default function AttendancePage() {
             </tbody>
           </table>
         </div>
-        {filteredAttendance.length === 0 && <EmptyState title="No attendance records found" />}
+        {!isLoading && filteredAttendance.length === 0 && <EmptyState title="No attendance records found" />}
       </div>
 
       {/* Mobile cards */}
@@ -140,7 +174,7 @@ export default function AttendancePage() {
             ]}
           />
         ))}
-        {filteredAttendance.length === 0 && <EmptyState title="No attendance records found" />}
+        {!isLoading && filteredAttendance.length === 0 && <EmptyState title="No attendance records found" />}
       </div>
     </>
   );

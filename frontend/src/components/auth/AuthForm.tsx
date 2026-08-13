@@ -192,7 +192,7 @@ export function AuthForm() {
                 icon={faUser}
                 type="text"
                 name="username"
-                placeholder="e.g. admin"
+                placeholder="e.g. myusername"
                 value={loginData.username}
                 onChange={handleLoginChange}
                 isDark={isDark}

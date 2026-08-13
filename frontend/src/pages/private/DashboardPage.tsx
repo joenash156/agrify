@@ -24,14 +24,41 @@ import { useTheme } from "../../contexts/ThemeContext";
 import { useCurrentUser } from "../../contexts/AuthContext";
 import { StatCard } from "../../components/dashboard/StatCard";
 import { formatGreeting } from "../../utils/greeting";
+import { formatDate } from "../../utils/formatDate";
 import { getDashboardOverview, type DashboardOverview } from "../../services/dashboardService";
-import { RECENT_SALES, UPCOMING_HARVESTS } from "../../data/dashboardMockData";
+import { saleService } from "../../services/saleService";
+import { cropService } from "../../services/cropService";
+import { farmService } from "../../services/farmService";
+
+interface RecentSaleRow {
+  id: string;
+  customer: string;
+  items: number;
+  amount: string;
+  status: string;
+  date: string;
+}
+
+interface UpcomingHarvestRow {
+  crop: string;
+  variety: string;
+  farm: string;
+  daysLeft: number;
+}
+
+const SALE_STATUS_LABEL: Record<string, string> = {
+  PAID: "Paid",
+  PARTIALLY_PAID: "Partially Paid",
+  UNPAID: "Unpaid",
+  CANCELLED: "Cancelled",
+};
 
 function SaleStatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     Paid:            "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
     "Partially Paid": "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
     Unpaid:          "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
+    Cancelled:       "bg-zinc-500/10 text-zinc-500 dark:text-zinc-400 border border-zinc-500/20",
   };
   return (
     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${map[status] ?? map["Partially Paid"]}`}>
@@ -54,6 +81,8 @@ export default function DashboardPage() {
 
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [recentSales, setRecentSales] = useState<RecentSaleRow[]>([]);
+  const [upcomingHarvests, setUpcomingHarvests] = useState<UpcomingHarvestRow[]>([]);
 
   const fetchOverview = useCallback(() => {
     return getDashboardOverview()
@@ -61,13 +90,54 @@ export default function DashboardPage() {
       .catch(() => setOverview(null));
   }, []);
 
+  const fetchWidgets = useCallback(() => {
+    return Promise.all([saleService.findAll(), cropService.findAll(), farmService.findAll()])
+      .then(([sales, crops, farms]) => {
+        const farmNameById = new Map(farms.map((f) => [f.farmId, f.farmName]));
+
+        const sortedSales = [...sales].sort(
+          (a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime()
+        );
+        setRecentSales(
+          sortedSales.slice(0, 5).map((sale) => ({
+            id: sale.saleId,
+            customer: sale.customerName,
+            items: sale.itemCount,
+            amount: `₵ ${sale.total.toLocaleString()}`,
+            status: SALE_STATUS_LABEL[sale.saleStatus] ?? sale.saleStatus,
+            date: formatDate(sale.saleDate),
+          }))
+        );
+
+        const today = new Date();
+        const upcoming = crops
+          .filter((c) => c.cropStatus === "GROWING" || c.cropStatus === "READY")
+          .map((c) => ({
+            crop: c.cropName,
+            variety: c.cropVariety,
+            farm: farmNameById.get(c.farmId) ?? "Unknown Farm",
+            daysLeft: Math.ceil(
+              (new Date(c.expectedHarvestDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+            ),
+          }))
+          .filter((c) => c.daysLeft >= 0)
+          .sort((a, b) => a.daysLeft - b.daysLeft);
+        setUpcomingHarvests(upcoming.slice(0, 4));
+      })
+      .catch(() => {
+        setRecentSales([]);
+        setUpcomingHarvests([]);
+      });
+  }, []);
+
   useEffect(() => {
     fetchOverview();
-  }, [fetchOverview]);
+    fetchWidgets();
+  }, [fetchOverview, fetchWidgets]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
-    fetchOverview().finally(() => setIsRefreshing(false));
+    Promise.all([fetchOverview(), fetchWidgets()]).finally(() => setIsRefreshing(false));
   };
 
   const stats = overview?.stats ?? [];
@@ -337,11 +407,11 @@ export default function DashboardPage() {
             </button>
           </div>
           <div className={`divide-y ${isDark ? "divide-zinc-800" : "divide-zinc-100"}`}>
-            {RECENT_SALES.map((sale) => (
+            {recentSales.map((sale) => (
               <div key={sale.id} className={`flex items-center justify-between px-5 py-3 gap-4 transition-colors ${isDark ? "hover:bg-zinc-800/50" : "hover:bg-zinc-100"}`}>
                 <div className="min-w-0">
                   <p className={`text-xs font-bold truncate ${sectionTitle}`}>{sale.customer}</p>
-                  <p className={`text-[11px] ${subText}`}>{sale.id} · {sale.items} item{sale.items > 1 ? "s" : ""} · {sale.date}</p>
+                  <p className={`text-[11px] ${subText}`}>{sale.items} item{sale.items > 1 ? "s" : ""} · {sale.date}</p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className={`text-xs font-black ${sectionTitle}`}>{sale.amount}</span>
@@ -349,6 +419,9 @@ export default function DashboardPage() {
                 </div>
               </div>
             ))}
+            {recentSales.length === 0 && (
+              <p className={`px-5 py-6 text-center text-xs ${subText}`}>No sales recorded yet.</p>
+            )}
           </div>
         </div>
 
@@ -364,7 +437,7 @@ export default function DashboardPage() {
             </button>
           </div>
           <div className={`divide-y ${isDark ? "divide-zinc-800" : "divide-zinc-100"}`}>
-            {UPCOMING_HARVESTS.map((h, i) => (
+            {upcomingHarvests.map((h, i) => (
               <div key={i} className={`flex items-center justify-between px-5 py-3 gap-4 ${isDark ? "hover:bg-zinc-800/50" : "hover:bg-zinc-100"} transition-colors`}>
                 <div className="flex items-center gap-3 min-w-0">
                   {h.daysLeft <= 5 && (
@@ -372,12 +445,15 @@ export default function DashboardPage() {
                   )}
                   <div className="min-w-0">
                     <p className={`text-xs font-bold truncate ${sectionTitle}`}>{h.crop} <span className="font-normal text-zinc-400">({h.variety})</span></p>
-                    <p className={`text-[11px] ${subText}`}>{h.farm} · {h.quantity} est.</p>
+                    <p className={`text-[11px] ${subText}`}>{h.farm}</p>
                   </div>
                 </div>
                 <HarvestUrgencyBadge days={h.daysLeft} />
               </div>
             ))}
+            {upcomingHarvests.length === 0 && (
+              <p className={`px-5 py-6 text-center text-xs ${subText}`}>No upcoming harvests scheduled.</p>
+            )}
           </div>
         </div>
       </div>
