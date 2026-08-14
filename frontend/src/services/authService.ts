@@ -1,6 +1,8 @@
 import { httpClient, setAccessToken, getAccessToken, refreshAccessToken } from "./httpClient";
 import type { UserRole } from "../types/user";
 
+export type AccountStatus = "ACTIVE" | "INACTIVE" | "SUSPENDED";
+
 export interface AuthUser {
   userId: string;
   username: string;
@@ -8,6 +10,7 @@ export interface AuthUser {
   lastName: string;
   email: string;
   role: UserRole;
+  accountStatus: AccountStatus;
 }
 
 interface AuthResponse extends AuthUser {
@@ -17,8 +20,8 @@ interface AuthResponse extends AuthUser {
 }
 
 function toAuthUser(data: AuthResponse): AuthUser {
-  const { userId, username, firstName, lastName, email, role } = data;
-  return { userId, username, firstName, lastName, email, role };
+  const { userId, username, firstName, lastName, email, role, accountStatus } = data;
+  return { userId, username, firstName, lastName, email, role, accountStatus };
 }
 
 export async function login(username: string, password: string): Promise<AuthUser> {

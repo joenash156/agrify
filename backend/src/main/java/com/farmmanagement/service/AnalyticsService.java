@@ -7,6 +7,9 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,58 +19,71 @@ import java.util.Map;
 public class AnalyticsService {
     private final JdbcTemplate jdbcTemplate;
 
+    private static final LocalDate EARLIEST = LocalDate.of(2000, 1, 1);
+    private static final LocalDate LATEST = LocalDate.of(2100, 12, 31);
+
     public AnalyticsService(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public OverviewDto getOverview() {
-        BigDecimal revenueYtd = queryDecimal(
-                "SELECT COALESCE(SUM(total),0) FROM sale WHERE sale_status IN ('PAID','PARTIALLY_PAID') AND YEAR(sale_date) = YEAR(CURDATE())");
-        BigDecimal yieldYtd = queryDecimal(
-                "SELECT COALESCE(SUM(quantity),0) FROM harvest WHERE YEAR(harvest_date) = YEAR(CURDATE())");
+    public OverviewDto getOverview(LocalDate from, LocalDate to) {
+        LocalDate rangeFrom = from != null ? from : EARLIEST;
+        LocalDate rangeTo = to != null ? to : LATEST;
+        // sale_date/payment_date are TIMESTAMP columns — bounding them with a bare LocalDate
+        // upper bound would mean "<= midnight of that day", silently excluding that whole day.
+        LocalDateTime tsFrom = rangeFrom.atStartOfDay();
+        LocalDateTime tsTo = rangeTo.atTime(LocalTime.MAX);
+
+        BigDecimal revenueInRange = queryDecimal(
+                "SELECT COALESCE(SUM(total),0) FROM sale WHERE sale_status IN ('PAID','PARTIALLY_PAID') " +
+                        "AND is_voided = 0 AND sale_date BETWEEN ? AND ?", tsFrom, tsTo);
+        BigDecimal yieldInRange = queryDecimal(
+                "SELECT COALESCE(SUM(quantity),0) FROM harvest WHERE harvest_date BETWEEN ? AND ?", rangeFrom, rangeTo);
         int activeFarms = queryInt("SELECT COUNT(*) FROM farm WHERE farm_status = 'ACTIVE'");
         int totalEmployees = queryInt("SELECT COUNT(*) FROM employment WHERE employment_status = 'ACTIVE'");
 
         List<StatCardDto> stats = List.of(
-                new StatCardDto("revenue-ytd", "Total Revenue (YTD)", currency(revenueYtd), null, "neutral", "Across all farms"),
-                new StatCardDto("yield-ytd", "Total Harvest Yield (YTD)", yieldYtd.setScale(0, RoundingMode.HALF_UP) + " kg", null, "neutral", "All crops combined"),
+                new StatCardDto("revenue-ytd", "Total Revenue", currency(revenueInRange), null, "neutral", "In selected range"),
+                new StatCardDto("yield-ytd", "Total Harvest Yield", yieldInRange.setScale(0, RoundingMode.HALF_UP) + " kg", null, "neutral", "In selected range"),
                 new StatCardDto("active-farms", "Active Farms", String.valueOf(activeFarms), null, "neutral", "Currently operational"),
                 new StatCardDto("total-employees", "Total Employees", String.valueOf(totalEmployees), null, "neutral", "Across all farms")
         );
 
         Map<String, List<Map<String, Object>>> charts = new HashMap<>();
         charts.put("revenueTrend", jdbcTemplate.queryForList(
-                "SELECT DATE_FORMAT(sale_date, '%b') AS month, SUM(total) AS revenue FROM sale " +
-                        "WHERE sale_date >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH) " +
-                        "GROUP BY DATE_FORMAT(sale_date, '%Y-%m'), DATE_FORMAT(sale_date, '%b') " +
-                        "ORDER BY DATE_FORMAT(sale_date, '%Y-%m')"));
+                "SELECT DATE_FORMAT(sale_date, '%b %e') AS month, SUM(total) AS revenue FROM sale " +
+                        "WHERE is_voided = 0 AND sale_date BETWEEN ? AND ? " +
+                        "GROUP BY DATE_FORMAT(sale_date, '%Y-%m-%d'), DATE_FORMAT(sale_date, '%b %e') " +
+                        "ORDER BY DATE_FORMAT(sale_date, '%Y-%m-%d')", tsFrom, tsTo));
         charts.put("harvestYield", jdbcTemplate.queryForList(
-                "SELECT DATE_FORMAT(harvest_date, '%b') AS month, SUM(quantity) AS yield FROM harvest " +
-                        "WHERE harvest_date >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH) " +
-                        "GROUP BY DATE_FORMAT(harvest_date, '%Y-%m'), DATE_FORMAT(harvest_date, '%b') " +
-                        "ORDER BY DATE_FORMAT(harvest_date, '%Y-%m')"));
+                "SELECT DATE_FORMAT(harvest_date, '%b %e') AS month, SUM(quantity) AS yield FROM harvest " +
+                        "WHERE harvest_date BETWEEN ? AND ? " +
+                        "GROUP BY DATE_FORMAT(harvest_date, '%Y-%m-%d'), DATE_FORMAT(harvest_date, '%b %e') " +
+                        "ORDER BY DATE_FORMAT(harvest_date, '%Y-%m-%d')", rangeFrom, rangeTo));
         charts.put("cropStatus", jdbcTemplate.queryForList(
                 "SELECT crop_status AS name, COUNT(*) AS value FROM crop GROUP BY crop_status"));
         charts.put("revenueByFarm", jdbcTemplate.queryForList(
                 "SELECT f.farm_name AS farm, COALESCE(SUM(s.total),0) AS revenue FROM farm f " +
                         "LEFT JOIN employment e ON e.farm_id = f.farm_id " +
                         "LEFT JOIN sale s ON s.employment_id = e.employment_id AND s.sale_status IN ('PAID','PARTIALLY_PAID') " +
-                        "GROUP BY f.farm_id, f.farm_name ORDER BY revenue DESC"));
+                        "AND s.is_voided = 0 AND s.sale_date BETWEEN ? AND ? " +
+                        "GROUP BY f.farm_id, f.farm_name ORDER BY revenue DESC", tsFrom, tsTo));
         charts.put("paymentStatus", jdbcTemplate.queryForList(
-                "SELECT payment_status AS name, COUNT(*) AS value FROM payment GROUP BY payment_status"));
+                "SELECT payment_status AS name, COUNT(*) AS value FROM payment " +
+                        "WHERE payment_date BETWEEN ? AND ? GROUP BY payment_status", tsFrom, tsTo));
         charts.put("equipmentStatus", jdbcTemplate.queryForList(
                 "SELECT equipment_status AS name, COUNT(*) AS value FROM equipment GROUP BY equipment_status"));
 
         return new OverviewDto(stats, charts);
     }
 
-    private int queryInt(String sql) {
-        Integer result = jdbcTemplate.queryForObject(sql, Integer.class);
+    private int queryInt(String sql, Object... args) {
+        Integer result = jdbcTemplate.queryForObject(sql, Integer.class, args);
         return result != null ? result : 0;
     }
 
-    private BigDecimal queryDecimal(String sql) {
-        BigDecimal result = jdbcTemplate.queryForObject(sql, BigDecimal.class);
+    private BigDecimal queryDecimal(String sql, Object... args) {
+        BigDecimal result = jdbcTemplate.queryForObject(sql, BigDecimal.class, args);
         return result != null ? result : BigDecimal.ZERO;
     }
 

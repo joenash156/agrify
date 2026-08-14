@@ -12,4 +12,6 @@ public interface AppUserDao {
     AppUser save(AppUser item);
     boolean update(UUID id, AppUser item);
     boolean delete(UUID id);
+    /** Kept in sync with employment_status by EmploymentService — pass null to clear (e.g. on delete). */
+    void updateWorkingStatus(UUID userId, String workingStatus);
 }

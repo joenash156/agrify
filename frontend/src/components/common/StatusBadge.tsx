@@ -10,6 +10,7 @@ interface StatusBadgeProps {
     | "payment"
     | "attendance"
     | "employment"
+    | "account"
     | "severity"
     | "grade";
   className?: string;
@@ -106,6 +107,12 @@ const employmentStatusColors: ColorMap = {
   SUSPENDED: neutral,
 };
 
+const accountStatusColors: ColorMap = {
+  ACTIVE: emerald,
+  INACTIVE: amber,
+  SUSPENDED: red,
+};
+
 const severityColors: ColorMap = {
   LOW: emerald,
   MEDIUM: amber,
@@ -127,6 +134,7 @@ const variantMap: Record<string, ColorMap> = {
   payment: paymentStatusColors,
   attendance: attendanceStatusColors,
   employment: employmentStatusColors,
+  account: accountStatusColors,
   severity: severityColors,
   grade: gradeColors,
 };

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   AreaChart,
   Area,
@@ -23,6 +24,8 @@ import {
 import { useTheme } from "../../contexts/ThemeContext";
 import { useCurrentUser } from "../../contexts/AuthContext";
 import { StatCard } from "../../components/dashboard/StatCard";
+import { AccountPendingNotice } from "../../components/layout/AccountPendingNotice";
+import { DateRangeFilter, type DateRange } from "../../components/common/DateRangeFilter";
 import { formatGreeting } from "../../utils/greeting";
 import { formatDate } from "../../utils/formatDate";
 import { getDashboardOverview, type DashboardOverview } from "../../services/dashboardService";
@@ -78,17 +81,20 @@ export default function DashboardPage() {
   const isDark = theme === "dark";
   const user = useCurrentUser();
   const isAdmin = user.role === "ADMIN" || user.role === "FARM_MANAGER";
+  // ADMIN is the system's prime role and is always exempt from the account-status gate.
+  const isRestricted = user.accountStatus !== "ACTIVE" && user.role !== "ADMIN";
 
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [recentSales, setRecentSales] = useState<RecentSaleRow[]>([]);
   const [upcomingHarvests, setUpcomingHarvests] = useState<UpcomingHarvestRow[]>([]);
+  const [range, setRange] = useState<DateRange>({ preset: "ALL", from: null, to: null });
 
   const fetchOverview = useCallback(() => {
-    return getDashboardOverview()
+    return getDashboardOverview(range.from, range.to)
       .then(setOverview)
       .catch(() => setOverview(null));
-  }, []);
+  }, [range]);
 
   const fetchWidgets = useCallback(() => {
     return Promise.all([saleService.findAll(), cropService.findAll(), farmService.findAll()])
@@ -131,9 +137,10 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    if (isRestricted) return;
     fetchOverview();
     fetchWidgets();
-  }, [fetchOverview, fetchWidgets]);
+  }, [fetchOverview, fetchWidgets, isRestricted]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -158,27 +165,37 @@ export default function DashboardPage() {
             {formatGreeting(user.firstName)}
           </h2>
           <p className={`text-xs sm:text-sm mt-0.5 font-medium ${subText}`}>
-            {isAdmin
+            {isRestricted
+              ? "Access is limited until an administrator activates your account."
+              : isAdmin
               ? "Here's what's happening across your farms today."
               : "Here's your work summary for today."}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleRefresh}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
-            isDark
-              ? "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-              : "border-zinc-200 text-zinc-700 hover:bg-zinc-100"
-          }`}
-        >
-          <FontAwesomeIcon
-            icon={faArrowRotateRight}
-            className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`}
-          />
-          Refresh
-        </button>
+        {!isRestricted && (
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+              isDark
+                ? "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                : "border-zinc-200 text-zinc-700 hover:bg-zinc-100"
+            }`}
+          >
+            <FontAwesomeIcon
+              icon={faArrowRotateRight}
+              className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </button>
+        )}
       </div>
+
+      {isRestricted ? (
+        <AccountPendingNotice status={user.accountStatus as Exclude<typeof user.accountStatus, "ACTIVE">} />
+      ) : (
+        <>
+      <DateRangeFilter value={range} onChange={setRange} />
 
       {/* ── Stat Cards Grid ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -402,9 +419,9 @@ export default function DashboardPage() {
               <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Recent Sales</h3>
               <p className={`text-xs ${subText}`}>Last 5 orders</p>
             </div>
-            <button className="text-[11px] font-bold text-teal-600 hover:text-teal-700 flex items-center gap-1">
+            <Link to="/sales" className="text-[11px] font-bold text-teal-600 hover:text-teal-700 flex items-center gap-1">
               View all <FontAwesomeIcon icon={faChevronRight} className="w-2.5 h-2.5" />
-            </button>
+            </Link>
           </div>
           <div className={`divide-y ${isDark ? "divide-zinc-800" : "divide-zinc-100"}`}>
             {recentSales.map((sale) => (
@@ -432,9 +449,9 @@ export default function DashboardPage() {
               <h3 className={`text-sm font-extrabold ${sectionTitle}`}>Upcoming Harvests</h3>
               <p className={`text-xs ${subText}`}>Crops due for harvest soon</p>
             </div>
-            <button className="text-[11px] font-bold text-teal-600 hover:text-teal-700 flex items-center gap-1">
+            <Link to="/crops" className="text-[11px] font-bold text-teal-600 hover:text-teal-700 flex items-center gap-1">
               View all <FontAwesomeIcon icon={faChevronRight} className="w-2.5 h-2.5" />
-            </button>
+            </Link>
           </div>
           <div className={`divide-y ${isDark ? "divide-zinc-800" : "divide-zinc-100"}`}>
             {upcomingHarvests.map((h, i) => (
@@ -457,6 +474,8 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+        </>
+      )}
     </>
   );
 }

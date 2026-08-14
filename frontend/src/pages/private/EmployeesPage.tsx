@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faUsers, faTractor, faCalendarDay, faCircleCheck, faClock, faCreditCard } from "@fortawesome/free-solid-svg-icons";
+import { faUsers, faTractor, faCalendarDay, faCircleCheck, faClock, faCreditCard, faUserCheck } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { StatCard } from "../../components/dashboard/StatCard";
 import { StatusBadge } from "../../components/common/StatusBadge";
@@ -14,12 +14,20 @@ import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
-import { employeeService, type EmploymentRecordDto } from "../../services/employeeService";
+import { useToast } from "../../contexts/ToastContext";
+import { employeeService } from "../../services/employeeService";
 import { appUserService, type AppUser } from "../../services/appUserService";
 import { farmService } from "../../services/farmService";
+import { accountService, type AccountResponse } from "../../services/accountService";
 import type { Farm } from "../../types/farm";
 import type { Employee } from "../../types/employee";
 import type { StatCardData } from "../../types/dashboard";
+
+const ACCOUNT_STATUS_OPTIONS = [
+  { value: "ACTIVE", label: "Active" },
+  { value: "INACTIVE", label: "Inactive" },
+  { value: "SUSPENDED", label: "Suspended" },
+];
 
 const STATUS_FILTERS: Array<Employee["employmentStatus"] | "ALL"> = [
   "ALL",
@@ -36,66 +44,159 @@ const EMPLOYMENT_STATUS_OPTIONS = [
   { value: "TERMINATED", label: "Terminated" },
 ];
 
-type ModalState = { mode: "create" | "edit" | "view"; record?: Employee };
+const ROLE_OPTIONS = [
+  { value: "WORKER", label: "Worker" },
+  { value: "SALES_PERSON", label: "Sales Person" },
+  { value: "FARM_MANAGER", label: "Farm Manager" },
+];
+
+function formatRole(role: string): string {
+  return ROLE_OPTIONS.find((r) => r.value === role)?.label ?? role;
+}
+
+/** A row in the Employees table. Sourced from every registered person (app_user — the backend
+ * already excludes ADMIN there), so a freshly self-registered account shows up immediately even
+ * before any employment record exists — employmentId is null until an admin activates it, at
+ * which point the employment-specific fields populate. accountStatus ("Account Access") only
+ * populates for ADMIN viewers, since /api/accounts is admin-only; workingStatus ("Status") comes
+ * straight off app_user and is kept in sync with the employment record by the backend, so it's
+ * visible to everyone with page access. */
+interface EmployeeRow {
+  employmentId: string | null;
+  accountId: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumber: string;
+  farmName: string | null;
+  jobTitle: string | null;
+  salary: number | null;
+  hireDate: string | null;
+  workingStatus: AppUser["workingStatus"];
+  accountStatus: AccountResponse["accountStatus"] | null;
+}
+
+type ModalState = { mode: "edit" | "view"; record: EmployeeRow };
 
 export default function EmployeesPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const currentUser = useCurrentUser();
   const canManage = canManageRecords(currentUser.role);
+  const isAdmin = currentUser.role === "ADMIN";
+  const toast = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Employee["employmentStatus"] | "ALL">("ALL");
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [employments, setEmployments] = useState<EmploymentRecordDto[]>([]);
-  const [users, setUsers] = useState<AppUser[]>([]);
+  const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  const [employments, setEmployments] = useState<{ employmentId: string; userId: string; farmId: string }[]>([]);
   const [farms, setFarms] = useState<Farm[]>([]);
+  const [accounts, setAccounts] = useState<AccountResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [modal, setModal] = useState<ModalState | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<EmployeeRow | null>(null);
+  const [onboarding, setOnboarding] = useState<AccountResponse | null>(null);
+  const [confirmOnboard, setConfirmOnboard] = useState<{
+    account: AccountResponse;
+    farmId: string;
+    role: string;
+    salary: number;
+    hireDate: string;
+  } | null>(null);
 
   const loadEmployees = useCallback(() => {
-    return Promise.all([employeeService.findAll(), appUserService.findAll(), farmService.findAll()])
-      .then(([employmentList, userList, farmList]) => {
+    return Promise.all([
+      employeeService.findAll(),
+      appUserService.findAll(),
+      farmService.findAll(),
+      isAdmin ? accountService.findAll() : Promise.resolve<AccountResponse[]>([]),
+    ])
+      .then(([employmentList, userList, farmList, accountList]) => {
         setEmployments(employmentList);
-        setUsers(userList);
         setFarms(farmList);
-        const userById = new Map(userList.map((u) => [u.userId, u]));
+        setAccounts(accountList);
+
         const farmNameById = new Map(farmList.map((f) => [f.farmId, f.farmName]));
+        const employmentByUserId = new Map(employmentList.map((e) => [e.userId, e]));
+        const accountByUserIdLocal = new Map(accountList.map((a) => [a.userId, a]));
+
         setEmployees(
-          employmentList.map((employment) => {
-            const user = userById.get(employment.userId);
+          userList.map((user) => {
+            const employment = employmentByUserId.get(user.userId);
+            const account = accountByUserIdLocal.get(user.userId);
             return {
-              employmentId: employment.employmentId,
-              userId: employment.userId,
-              firstName: user?.firstName ?? "Unknown",
-              lastName: user?.lastName ?? "User",
-              email: user?.email ?? "—",
-              phoneNumber: user?.phoneNumber ?? "—",
-              farmName: farmNameById.get(employment.farmId) ?? "Unknown Farm",
-              jobTitle: employment.role,
-              salary: employment.salary,
-              hireDate: employment.hireDate,
-              employmentStatus: employment.employmentStatus,
+              employmentId: employment?.employmentId ?? null,
+              accountId: account?.accountId ?? "",
+              userId: user.userId,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              email: user.email,
+              phoneNumber: user.phoneNumber,
+              farmName: employment ? farmNameById.get(employment.farmId) ?? "Unknown Farm" : null,
+              jobTitle: employment?.role ?? null,
+              salary: employment?.salary ?? null,
+              hireDate: employment?.hireDate ?? null,
+              workingStatus: user.workingStatus,
+              accountStatus: account?.accountStatus ?? null,
             };
           })
         );
       })
       .catch(() => setEmployees([]));
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     loadEmployees().finally(() => setIsLoading(false));
   }, [loadEmployees]);
 
-  const employeeFields: FieldConfig[] = useMemo(
+  const canChangeRole = currentUser.role === "ADMIN";
+
+  const accountByUserId = useMemo(() => new Map(accounts.map((a) => [a.userId, a])), [accounts]);
+
+  const employeeFields: FieldConfig[] = useMemo(() => {
+    const farmField: FieldConfig = {
+      name: "farmId",
+      label: "Farm",
+      type: "select",
+      required: true,
+      options: farms.map((f) => ({ value: f.farmId, label: f.farmName })),
+    };
+    const salaryHireStatus: FieldConfig[] = [
+      { name: "salary", label: "Salary (₵)", type: "number", required: true, step: "0.01" },
+      { name: "hireDate", label: "Hire Date", type: "date", required: true },
+      { name: "employmentStatus", label: "Status", type: "select", required: true, options: EMPLOYMENT_STATUS_OPTIONS },
+    ];
+
+    if (modal?.mode === "edit") {
+      return [
+        { name: "firstName", label: "First Name", type: "text", disabled: true },
+        { name: "lastName", label: "Last Name", type: "text", disabled: true },
+        { name: "email", label: "Email", type: "text", disabled: true },
+        farmField,
+        ...(canChangeRole
+          ? [
+              { name: "role", label: "Change Role", type: "select" as const, required: true, options: ROLE_OPTIONS },
+              { name: "accountStatus", label: "Account Access", type: "select" as const, required: true, options: ACCOUNT_STATUS_OPTIONS },
+            ]
+          : []),
+        ...salaryHireStatus,
+      ];
+    }
+
+    // view
+    return [
+      { name: "firstName", label: "First Name", type: "text" },
+      { name: "lastName", label: "Last Name", type: "text" },
+      { name: "email", label: "Email", type: "text" },
+      { name: "phoneNumber", label: "Phone Number", type: "text" },
+      farmField,
+      { name: "role", label: "Role", type: "select", options: ROLE_OPTIONS },
+      ...salaryHireStatus,
+    ];
+  }, [farms, modal?.mode, canChangeRole]);
+
+  const onboardFields: FieldConfig[] = useMemo(
     () => [
-      {
-        name: "userId",
-        label: "Person",
-        type: "select",
-        required: true,
-        options: users.map((u) => ({ value: u.userId, label: `${u.firstName} ${u.lastName} (${u.email})` })),
-      },
       {
         name: "farmId",
         label: "Farm",
@@ -103,34 +204,73 @@ export default function EmployeesPage() {
         required: true,
         options: farms.map((f) => ({ value: f.farmId, label: f.farmName })),
       },
-      { name: "role", label: "Job Title", type: "text", required: true, placeholder: "e.g. Field Supervisor" },
+      { name: "role", label: "Role", type: "select", required: true, options: ROLE_OPTIONS },
       { name: "salary", label: "Salary (₵)", type: "number", required: true, step: "0.01" },
       { name: "hireDate", label: "Hire Date", type: "date", required: true },
-      { name: "employmentStatus", label: "Status", type: "select", required: true, options: EMPLOYMENT_STATUS_OPTIONS },
     ],
-    [users, farms]
+    [farms]
   );
 
   const handleSubmit = async (values: Record<string, FieldValue>) => {
+    if (!modal?.record || !modal.record.employmentId) return;
+    const role = canChangeRole && values.role ? String(values.role) : modal.record.jobTitle ?? "WORKER";
     const payload = {
-      userId: String(values.userId),
+      userId: modal.record.userId,
       farmId: String(values.farmId),
-      role: String(values.role),
+      role,
       salary: Number(values.salary),
       hireDate: String(values.hireDate),
       employmentStatus: values.employmentStatus as Employee["employmentStatus"],
     };
-    if (modal?.mode === "edit" && modal.record) {
-      await employeeService.update(modal.record.employmentId, payload);
-    } else {
-      await employeeService.create(payload);
+    await employeeService.update(modal.record.employmentId, payload);
+
+    if (canChangeRole) {
+      const account = accountByUserId.get(modal.record.userId);
+      if (account) {
+        await accountService.update(account.accountId, {
+          accountStatus: String(values.accountStatus) as AccountResponse["accountStatus"],
+          role: role as AccountResponse["role"],
+        });
+      }
     }
+    toast.success("Employee updated.");
     await loadEmployees();
   };
 
   const handleDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || !deleteTarget.employmentId) return;
     await employeeService.remove(deleteTarget.employmentId);
+    toast.success("Employee removed.");
+    await loadEmployees();
+  };
+
+  const handleOnboardSubmit = async (values: Record<string, FieldValue>) => {
+    if (!onboarding) return;
+    setConfirmOnboard({
+      account: onboarding,
+      farmId: String(values.farmId),
+      role: String(values.role),
+      salary: Number(values.salary),
+      hireDate: String(values.hireDate),
+    });
+  };
+
+  const handleConfirmOnboard = async () => {
+    if (!confirmOnboard) return;
+    const { account, farmId, role, salary, hireDate } = confirmOnboard;
+    // Employment first, then the account flips ACTIVE — if employment creation fails, the
+    // account stays exactly as it was (retryable) instead of landing in a half-activated state
+    // where the account can sign in but has no employment record to work with.
+    await employeeService.create({
+      userId: account.userId,
+      farmId,
+      role,
+      salary,
+      hireDate,
+      employmentStatus: "ACTIVE",
+    });
+    await accountService.update(account.accountId, { accountStatus: "ACTIVE", role: role as AccountResponse["role"] });
+    toast.success("Account activated.");
     await loadEmployees();
   };
 
@@ -139,12 +279,13 @@ export default function EmployeesPage() {
   const subText = isDark ? "text-zinc-500" : "text-zinc-500";
 
   const stats: StatCardData[] = useMemo(() => {
-    const active = employees.filter((e) => e.employmentStatus === "ACTIVE");
-    const payroll = active.reduce((sum, e) => sum + e.salary, 0);
+    const realEmployees = employees.filter((e) => e.workingStatus !== null);
+    const active = realEmployees.filter((e) => e.workingStatus === "ACTIVE");
+    const payroll = active.reduce((sum, e) => sum + (e.salary ?? 0), 0);
     return [
-      { id: "total", title: "Total Employees", value: employees.length, trend: "neutral", subtitle: "Across all farms", icon: faUsers, accentColor: "blue" },
+      { id: "total", title: "Total Employees", value: realEmployees.length, trend: "neutral", subtitle: "Across all farms", icon: faUsers, accentColor: "blue" },
       { id: "active", title: "Active Employees", value: active.length, trend: "neutral", subtitle: "Currently employed", icon: faCircleCheck, accentColor: "teal" },
-      { id: "on-leave", title: "On Leave", value: employees.filter((e) => e.employmentStatus === "ON_LEAVE").length, trend: "neutral", subtitle: "Temporarily away", icon: faClock, accentColor: "amber" },
+      { id: "on-leave", title: "On Leave", value: realEmployees.filter((e) => e.workingStatus === "ON_LEAVE").length, trend: "neutral", subtitle: "Temporarily away", icon: faClock, accentColor: "amber" },
       { id: "payroll", title: "Monthly Payroll", value: `₵ ${payroll.toLocaleString()}`, trend: "neutral", subtitle: "Combined active salaries", icon: faCreditCard, accentColor: "purple" },
     ];
   }, [employees]);
@@ -154,22 +295,16 @@ export default function EmployeesPage() {
       const fullName = `${employee.firstName} ${employee.lastName}`.toLowerCase();
       const matchesSearch =
         fullName.includes(search.toLowerCase()) ||
-        employee.jobTitle.toLowerCase().includes(search.toLowerCase()) ||
-        employee.farmName.toLowerCase().includes(search.toLowerCase());
-      const matchesStatus = statusFilter === "ALL" || employee.employmentStatus === statusFilter;
+        (employee.jobTitle ?? "").toLowerCase().includes(search.toLowerCase()) ||
+        (employee.farmName ?? "").toLowerCase().includes(search.toLowerCase());
+      const matchesStatus = statusFilter === "ALL" || employee.workingStatus === statusFilter;
       return matchesSearch && matchesStatus;
     });
   }, [employees, search, statusFilter]);
 
   return (
     <>
-      <PageHeader
-        title="Employees"
-        subtitle="Manage farm staff, roles, and employment status."
-        actionLabel="Add Employee"
-        showAction={canManage}
-        onAction={() => setModal({ mode: "create" })}
-      />
+      <PageHeader title="Employees" subtitle="Manage farm staff, roles, and employment status." />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat) => (
@@ -189,10 +324,10 @@ export default function EmployeesPage() {
       {/* Desktop table */}
       <div className={`hidden md:block rounded-2xl border overflow-hidden ${cardBg}`}>
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[860px]">
+          <table className="w-full text-left border-collapse min-w-[960px]">
             <thead>
               <tr className={`border-b ${isDark ? "border-zinc-800" : "border-zinc-200"}`}>
-                {["Employee", "Job Title", "Farm", "Hired", "Salary", "Status"].map((col) => (
+                {["Employee", "Farm", "Hired", "Account Access", "Salary", "Status"].map((col) => (
                   <th
                     key={col}
                     className={`text-left px-5 py-3 text-[10px] font-extrabold uppercase tracking-widest ${
@@ -210,7 +345,7 @@ export default function EmployeesPage() {
             <tbody className={`divide-y ${isDark ? "divide-zinc-800" : "divide-zinc-100"}`}>
               {filteredEmployees.map((employee) => (
                 <tr
-                  key={employee.employmentId}
+                  key={employee.userId}
                   className={`transition-colors ${isDark ? "hover:bg-zinc-800/50" : "hover:bg-zinc-50"}`}
                 >
                   <td className="px-5 py-3.5">
@@ -225,37 +360,64 @@ export default function EmployeesPage() {
                         <p className={`text-xs font-bold ${sectionTitle}`}>
                           {employee.firstName} {employee.lastName}
                         </p>
-                        <p className={`text-[11px] ${subText}`}>{employee.email}</p>
+                        <p className={`text-[11px] ${subText}`}>
+                          {employee.jobTitle ? formatRole(employee.jobTitle) : "Pending activation"}
+                        </p>
                       </div>
                     </div>
                   </td>
-                  <td className={`px-5 py-3.5 text-xs font-medium ${subText}`}>{employee.jobTitle}</td>
                   <td className="px-5 py-3.5">
                     <div className={`flex items-center gap-1.5 text-xs font-medium ${subText}`}>
                       <FontAwesomeIcon icon={faTractor} className="w-3 h-3" />
-                      {employee.farmName}
+                      {employee.farmName ?? "—"}
                     </div>
                   </td>
                   <td className="px-5 py-3.5">
                     <div className={`flex items-center gap-1.5 text-xs font-semibold ${sectionTitle}`}>
                       <FontAwesomeIcon icon={faCalendarDay} className={`w-3 h-3 ${subText}`} />
-                      {formatDate(employee.hireDate)}
+                      {employee.hireDate ? formatDate(employee.hireDate) : "—"}
                     </div>
                   </td>
+                  <td className="px-5 py-3.5">
+                    {employee.accountStatus ? (
+                      <StatusBadge status={employee.accountStatus} variant="account" />
+                    ) : (
+                      <span className={`text-xs ${subText}`}>—</span>
+                    )}
+                  </td>
                   <td className={`px-5 py-3.5 text-xs font-semibold ${sectionTitle}`}>
-                    ₵ {employee.salary.toLocaleString()}
+                    {employee.salary !== null ? `₵ ${employee.salary.toLocaleString()}` : "—"}
                   </td>
                   <td className="px-5 py-3.5">
-                    <StatusBadge status={employee.employmentStatus} variant="employment" />
+                    {employee.workingStatus ? (
+                      <StatusBadge status={employee.workingStatus} variant="employment" />
+                    ) : (
+                      <span className={`text-xs ${subText}`}>—</span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5">
-                    <RowActions
-                      canManage={canManage}
-                      entityLabel="employee"
-                      onView={() => setModal({ mode: "view", record: employee })}
-                      onEdit={() => setModal({ mode: "edit", record: employee })}
-                      onDelete={() => setDeleteTarget(employee)}
-                    />
+                    {employee.employmentId ? (
+                      <RowActions
+                        canManage={canManage}
+                        entityLabel="employee"
+                        onView={() => setModal({ mode: "view", record: employee })}
+                        onEdit={() => setModal({ mode: "edit", record: employee })}
+                        onDelete={() => setDeleteTarget(employee)}
+                      />
+                    ) : (
+                      isAdmin && (
+                        <RowActions
+                          canManage={canManage}
+                          entityLabel="account"
+                          onEdit={() => {
+                            const account = accountByUserId.get(employee.userId);
+                            if (account) setOnboarding(account);
+                          }}
+                          editLabel="Activate"
+                          editIcon={faUserCheck}
+                        />
+                      )
+                    )}
                   </td>
                 </tr>
               ))}
@@ -267,46 +429,77 @@ export default function EmployeesPage() {
 
       {/* Mobile cards */}
       <div className="md:hidden space-y-3">
-        {filteredEmployees.map((employee) => (
-          <EntityCard
-            key={employee.employmentId}
-            icon={faUsers}
-            title={`${employee.firstName} ${employee.lastName}`}
-            subtitle={`${employee.jobTitle} · ${employee.farmName}`}
-            badge={<StatusBadge status={employee.employmentStatus} variant="employment" />}
-            canManage={canManage}
-            entityLabel="employee"
-            onView={() => setModal({ mode: "view", record: employee })}
-            onEdit={() => setModal({ mode: "edit", record: employee })}
-            onDelete={() => setDeleteTarget(employee)}
-            fields={[
-              { label: "Hired", value: formatDate(employee.hireDate) },
-              { label: "Salary", value: `₵ ${employee.salary.toLocaleString()}` },
-            ]}
-          />
-        ))}
+        {filteredEmployees.map((employee) =>
+          employee.employmentId ? (
+            <EntityCard
+              key={employee.employmentId}
+              icon={faUsers}
+              title={`${employee.firstName} ${employee.lastName}`}
+              subtitle={`${formatRole(employee.jobTitle ?? "")} · ${employee.farmName ?? "—"}`}
+              badge={<StatusBadge status={employee.workingStatus ?? "ACTIVE"} variant="employment" />}
+              canManage={canManage}
+              entityLabel="employee"
+              onView={() => setModal({ mode: "view", record: employee })}
+              onEdit={() => setModal({ mode: "edit", record: employee })}
+              onDelete={() => setDeleteTarget(employee)}
+              fields={[
+                { label: "Hired", value: formatDate(employee.hireDate ?? "") },
+                { label: "Account Access", value: <StatusBadge status={employee.accountStatus ?? "ACTIVE"} variant="account" /> },
+                { label: "Salary", value: `₵ ${(employee.salary ?? 0).toLocaleString()}` },
+              ]}
+            />
+          ) : (
+            <EntityCard
+              key={employee.userId}
+              icon={faUsers}
+              title={`${employee.firstName} ${employee.lastName}`}
+              subtitle="Pending activation"
+              badge={<StatusBadge status={employee.accountStatus ?? "INACTIVE"} variant="account" />}
+              canManage={canManage && isAdmin}
+              entityLabel="account"
+              onEdit={
+                isAdmin
+                  ? () => {
+                      const account = accountByUserId.get(employee.userId);
+                      if (account) setOnboarding(account);
+                    }
+                  : undefined
+              }
+              editLabel="Activate"
+              editIcon={faUserCheck}
+              fields={[
+                { label: "Email", value: employee.email },
+                { label: "Phone", value: employee.phoneNumber },
+              ]}
+            />
+          )
+        )}
         {!isLoading && filteredEmployees.length === 0 && <EmptyState title="No employees found" />}
       </div>
 
       <EntityFormModal
         isOpen={modal !== null}
         onClose={() => setModal(null)}
-        title={modal?.mode === "edit" ? "Edit Employee" : modal?.mode === "view" ? "Employee Details" : "Add Employee"}
+        title={modal?.mode === "edit" ? "Edit Employee" : "Employee Details"}
         fields={employeeFields}
         initialValues={
           modal?.record
             ? {
-                userId: modal.record.userId,
+                firstName: modal.record.firstName,
+                lastName: modal.record.lastName,
+                email: modal.record.email,
+                phoneNumber: modal.record.phoneNumber,
                 farmId: employments.find((e) => e.employmentId === modal.record?.employmentId)?.farmId ?? "",
-                role: modal.record.jobTitle,
-                salary: modal.record.salary,
-                hireDate: modal.record.hireDate,
-                employmentStatus: modal.record.employmentStatus,
+                role: modal.record.jobTitle ?? "WORKER",
+                accountStatus: accountByUserId.get(modal.record.userId)?.accountStatus ?? "ACTIVE",
+                salary: modal.record.salary ?? 0,
+                hireDate: modal.record.hireDate ?? "",
+                employmentStatus: modal.record.workingStatus ?? "ACTIVE",
               }
-            : { userId: "", farmId: "", role: "", salary: "", hireDate: "", employmentStatus: "ACTIVE" }
+            : { firstName: "", lastName: "", email: "", phoneNumber: "", farmId: "", role: "WORKER", accountStatus: "ACTIVE", salary: 0, hireDate: "", employmentStatus: "ACTIVE" }
         }
         onSubmit={handleSubmit}
-        submitLabel={modal?.mode === "edit" ? "Save Changes" : "Add Employee"}
+        submitLabel="Save Changes"
         readOnly={modal?.mode === "view"}
       />
 
@@ -320,6 +513,33 @@ export default function EmployeesPage() {
             : ""
         }
         onConfirm={handleDelete}
+      />
+
+      <EntityFormModal
+        isOpen={onboarding !== null}
+        onClose={() => setOnboarding(null)}
+        title="Activate Account"
+        subtitle={onboarding ? `@${onboarding.username}` : undefined}
+        fields={onboardFields}
+        initialValues={{ farmId: "", role: "WORKER", salary: "", hireDate: "" }}
+        onSubmit={handleOnboardSubmit}
+        submitLabel="Continue"
+      />
+
+      <ConfirmDialog
+        isOpen={confirmOnboard !== null}
+        onClose={() => setConfirmOnboard(null)}
+        title="Confirm Activation"
+        danger={false}
+        confirmLabel="Activate"
+        message={
+          confirmOnboard
+            ? `Activate this account as ${formatRole(confirmOnboard.role)} at ${
+                farms.find((f) => f.farmId === confirmOnboard.farmId)?.farmName ?? "the selected farm"
+              }? They'll be able to sign in and start working immediately.`
+            : ""
+        }
+        onConfirm={handleConfirmOnboard}
       />
     </>
   );

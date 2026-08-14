@@ -58,9 +58,13 @@ public class AuthController {
 
     @PostMapping("/login")
     public AuthResponseDto login(@RequestBody LoginDto dto, HttpServletResponse response) {
+        // Non-ACTIVE accounts are still allowed to sign in — the frontend shows them a
+        // pending-activation/suspended screen instead of the normal app (see accountStatus
+        // on the response). Blocking login entirely would leave a newly-registered user
+        // with no way to even know their account exists and needs admin approval.
         UserAccount account = userAccountDao.findByUsername(dto.getUsername())
                 .orElseThrow(() -> new RuntimeException("Invalid username or password"));
-        if (!"ACTIVE".equals(account.getAccountStatus()) || !passwordEncoder.matches(dto.getPassword(), account.getPasswordHash())) {
+        if (!passwordEncoder.matches(dto.getPassword(), account.getPasswordHash())) {
             throw new RuntimeException("Invalid username or password");
         }
         return issueTokens(account, response);
@@ -113,7 +117,8 @@ public class AuthController {
 
         return new AuthResponseDto(
                 accessToken, "Bearer", jwtService.getAccessTokenExpirationSeconds(),
-                user.getUserId(), account.getUsername(), user.getFirstName(), user.getLastName(), user.getEmail(), account.getRole()
+                user.getUserId(), account.getUsername(), user.getFirstName(), user.getLastName(), user.getEmail(), account.getRole(),
+                account.getAccountStatus()
         );
     }
 

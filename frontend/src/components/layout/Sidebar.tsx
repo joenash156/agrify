@@ -7,6 +7,7 @@ import {
   faLeaf,
   faXmark,
   faShieldHalved,
+  faLock,
 } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { getNavGroups } from "../../data/dashboardNav";
@@ -19,6 +20,8 @@ interface SidebarProps {
   onToggleCollapse: () => void;
   mobileOpen: boolean;
   onCloseMobile: () => void;
+  /** Non-ACTIVE account: every link but Dashboard renders disabled (no navigation). */
+  restricted?: boolean;
 }
 
 function isActive(pathname: string, href: string): boolean {
@@ -61,11 +64,13 @@ function SidebarNav({
   collapsed,
   isDark,
   onNavigate,
+  restricted,
 }: {
   groups: NavGroup[];
   collapsed: boolean;
   isDark: boolean;
   onNavigate?: () => void;
+  restricted?: boolean;
 }) {
   const location = useLocation();
   const pathname = location.pathname;
@@ -86,25 +91,27 @@ function SidebarNav({
           <div className="space-y-1">
             {group.items.map((item) => {
               const active = isActive(pathname, item.href);
-              return (
-                <Link
-                  key={item.href}
-                  to={item.href}
-                  onClick={onNavigate}
-                  title={collapsed ? item.label : undefined}
-                  className={[
-                    "relative flex items-center gap-3 h-10 rounded-xl text-xs font-bold transition-all duration-150",
-                    collapsed ? "justify-center px-0 mx-auto w-10" : "px-3",
-                    active
-                      ? isDark
-                        ? "bg-teal-500/15 text-teal-400 font-extrabold shadow-xs"
-                        : "bg-white/15 text-white font-extrabold shadow-xs backdrop-blur-xs"
-                      : isDark
-                      ? "text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-100"
-                      : "text-teal-100/80 hover:bg-white/10 hover:text-white",
-                  ].join(" ")}
-                >
-                  {active && (
+              const locked = restricted && item.href !== "/dashboard";
+
+              const itemClasses = [
+                "relative flex items-center gap-3 h-10 rounded-xl text-xs font-bold transition-all duration-150",
+                collapsed ? "justify-center px-0 mx-auto w-10" : "px-3",
+                locked
+                  ? isDark
+                    ? "text-zinc-600 cursor-not-allowed"
+                    : "text-teal-100/40 cursor-not-allowed"
+                  : active
+                  ? isDark
+                    ? "bg-teal-500/15 text-teal-400 font-extrabold shadow-xs"
+                    : "bg-white/15 text-white font-extrabold shadow-xs backdrop-blur-xs"
+                  : isDark
+                  ? "text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-100"
+                  : "text-teal-100/80 hover:bg-white/10 hover:text-white",
+              ].join(" ");
+
+              const content = (
+                <>
+                  {active && !locked && (
                     <span
                       className={`absolute left-0 top-2 bottom-2 w-1 rounded-r-full ${
                         isDark ? "bg-teal-400" : "bg-teal-300"
@@ -114,7 +121,9 @@ function SidebarNav({
                   <FontAwesomeIcon
                     icon={item.icon}
                     className={`w-4 h-4 shrink-0 transition-colors ${
-                      active
+                      locked
+                        ? "opacity-50"
+                        : active
                         ? isDark
                           ? "text-teal-400"
                           : "text-white"
@@ -128,11 +137,43 @@ function SidebarNav({
                       {item.label}
                     </span>
                   )}
-                  {!collapsed && item.badge && (
+                  {!collapsed && locked && (
+                    <FontAwesomeIcon icon={faLock} className="w-3 h-3 shrink-0 opacity-60" />
+                  )}
+                  {!collapsed && item.badge && !locked && (
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-600 text-white">
                       {item.badge}
                     </span>
                   )}
+                </>
+              );
+
+              if (locked) {
+                return (
+                  <div
+                    key={item.href}
+                    aria-disabled="true"
+                    title={
+                      collapsed
+                        ? item.label
+                        : "Activate your account to access this page"
+                    }
+                    className={itemClasses}
+                  >
+                    {content}
+                  </div>
+                );
+              }
+
+              return (
+                <Link
+                  key={item.href}
+                  to={item.href}
+                  onClick={onNavigate}
+                  title={collapsed ? item.label : undefined}
+                  className={itemClasses}
+                >
+                  {content}
                 </Link>
               );
             })}
@@ -149,6 +190,7 @@ export function Sidebar({
   onToggleCollapse,
   mobileOpen,
   onCloseMobile,
+  restricted = false,
 }: SidebarProps) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -204,7 +246,7 @@ export function Sidebar({
           </div>
         )}
 
-        <SidebarNav groups={groups} collapsed={collapsed} isDark={isDark} />
+        <SidebarNav groups={groups} collapsed={collapsed} isDark={isDark} restricted={restricted} />
 
         <div className={`p-3 border-t ${collapseBorder}`}>
           <button
@@ -264,6 +306,7 @@ export function Sidebar({
                 collapsed={false}
                 isDark={isDark}
                 onNavigate={onCloseMobile}
+                restricted={restricted}
               />
             </motion.aside>
           </>

@@ -12,6 +12,7 @@ import {
   faCreditCard,
   faUsers,
   faClipboardUser,
+  faCashRegister,
 } from "@fortawesome/free-solid-svg-icons";
 import type { NavGroup } from "../types/dashboard";
 import type { UserRole } from "../types/user";
@@ -79,14 +80,22 @@ export function getNavGroups(role: UserRole = "ADMIN"): NavGroup[] {
           icon: faBoxesStacked,
         },
         {
+          label: "POS Terminal",
+          href: "/pos",
+          icon: faCashRegister,
+          roles: ["ADMIN", "FARM_MANAGER", "SALES_PERSON"],
+        },
+        {
           label: "Sales & Orders",
           href: "/sales",
           icon: faReceipt,
+          roles: ["ADMIN", "FARM_MANAGER", "SALES_PERSON"],
         },
         {
           label: "Payments & Ledger",
           href: "/payments",
           icon: faCreditCard,
+          roles: ["ADMIN", "FARM_MANAGER", "SALES_PERSON"],
         },
       ],
     },

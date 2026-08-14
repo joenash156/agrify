@@ -12,11 +12,12 @@ public class AuthResponseDto {
     private String lastName;
     private String email;
     private String role;
+    private String accountStatus;
 
     public AuthResponseDto() {}
 
     public AuthResponseDto(String accessToken, String tokenType, long expiresIn, UUID userId, String username,
-                            String firstName, String lastName, String email, String role) {
+                            String firstName, String lastName, String email, String role, String accountStatus) {
         this.accessToken = accessToken;
         this.tokenType = tokenType;
         this.expiresIn = expiresIn;
@@ -26,6 +27,7 @@ public class AuthResponseDto {
         this.lastName = lastName;
         this.email = email;
         this.role = role;
+        this.accountStatus = accountStatus;
     }
 
     public String getAccessToken(){return accessToken;} public void setAccessToken(String v){accessToken=v;}
@@ -37,4 +39,5 @@ public class AuthResponseDto {
     public String getLastName(){return lastName;} public void setLastName(String v){lastName=v;}
     public String getEmail(){return email;} public void setEmail(String v){email=v;}
     public String getRole(){return role;} public void setRole(String v){role=v;}
+    public String getAccountStatus(){return accountStatus;} public void setAccountStatus(String v){accountStatus=v;}
 }

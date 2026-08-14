@@ -6,11 +6,13 @@ import com.farmmanagement.dto.SaleItemDto;
 import com.farmmanagement.model.SaleItem;
 import com.farmmanagement.service.SaleItemService;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/sale-items")
+@PreAuthorize("hasAnyRole('ADMIN','FARM_MANAGER','SALES_PERSON')")
 public class SaleItemController {
     private final SaleItemService service;
     public SaleItemController(SaleItemService service){this.service=service;}

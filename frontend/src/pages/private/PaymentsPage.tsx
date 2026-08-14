@@ -14,7 +14,6 @@ import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
-import { toPublicId } from "../../utils/publicId";
 import { paymentService } from "../../services/paymentService";
 import { saleService } from "../../services/saleService";
 import type { Sale } from "../../types/sale";
@@ -55,10 +54,12 @@ export default function PaymentsPage() {
       .then(([paymentList, saleList]) => {
         setSales(saleList);
         const customerNameBySaleId = new Map(saleList.map((s) => [s.saleId, s.customerName]));
+        const publicIdBySaleId = new Map(saleList.map((s) => [s.saleId, s.publicId]));
         setPayments(
           paymentList.map((payment) => ({
             ...payment,
             customerName: customerNameBySaleId.get(payment.saleId) ?? "Walk-in Customer",
+            salePublicId: publicIdBySaleId.get(payment.saleId) ?? payment.saleId,
           }))
         );
       })
@@ -76,7 +77,7 @@ export default function PaymentsPage() {
         label: "Sale",
         type: "select",
         required: true,
-        options: sales.map((s) => ({ value: s.saleId, label: `${toPublicId("SL", s.saleId)} · ${s.customerName} · ₵ ${s.total.toLocaleString()}` })),
+        options: sales.map((s) => ({ value: s.saleId, label: `${s.publicId} · ${s.customerName} · ₵ ${s.total.toLocaleString()}` })),
       },
       { name: "amount", label: "Amount (₵)", type: "number", required: true, step: "0.01" },
       { name: "paymentMethod", label: "Method", type: "select", required: true, options: PAYMENT_METHOD_OPTIONS },
@@ -199,8 +200,8 @@ export default function PaymentsPage() {
                         <FontAwesomeIcon icon={faCreditCard} className="w-4 h-4" />
                       </div>
                       <div>
-                        <p className={`text-xs font-bold ${sectionTitle}`}>{toPublicId("PL", payment.paymentId)}</p>
-                        <p className={`text-[11px] ${subText}`}>{toPublicId("SL", payment.saleId)}</p>
+                        <p className={`text-xs font-bold ${sectionTitle}`}>{payment.publicId}</p>
+                        <p className={`text-[11px] ${subText}`}>{payment.salePublicId}</p>
                       </div>
                     </div>
                   </td>
@@ -240,7 +241,7 @@ export default function PaymentsPage() {
             key={payment.paymentId}
             icon={faCreditCard}
             title={payment.customerName}
-            subtitle={`${toPublicId("PL", payment.paymentId)} · ${toPublicId("SL", payment.saleId)}`}
+            subtitle={`${payment.publicId} · ${payment.salePublicId}`}
             badge={<StatusBadge status={payment.paymentStatus} variant="payment" />}
             canManage={canManage}
             entityLabel="payment"
@@ -283,7 +284,7 @@ export default function PaymentsPage() {
         title="Delete Payment"
         message={
           deleteTarget
-            ? `Are you sure you want to delete payment ${toPublicId("PL", deleteTarget.paymentId)}? This cannot be undone.`
+            ? `Are you sure you want to delete payment ${deleteTarget.publicId}? This cannot be undone.`
             : ""
         }
         onConfirm={handleDelete}

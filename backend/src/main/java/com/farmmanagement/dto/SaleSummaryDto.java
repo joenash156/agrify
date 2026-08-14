@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 /** Sale joined with customer/staff names and item count — powers the Sales & Orders list page. */
 public class SaleSummaryDto {
     private UUID saleId;
+    private String publicId;
     private UUID customerId;
     private String customerName;
     private UUID employmentId;
@@ -16,12 +17,18 @@ public class SaleSummaryDto {
     private BigDecimal total;
     private String saleStatus;
     private int itemCount;
+    private boolean isVoided;
+    private LocalDateTime voidedAt;
+    private String voidedReason;
+    private String voidedByName;
 
     public SaleSummaryDto() {}
 
-    public SaleSummaryDto(UUID saleId, UUID customerId, String customerName, UUID employmentId, String soldByName,
-                           LocalDateTime saleDate, BigDecimal total, String saleStatus, int itemCount) {
+    public SaleSummaryDto(UUID saleId, String publicId, UUID customerId, String customerName, UUID employmentId, String soldByName,
+                           LocalDateTime saleDate, BigDecimal total, String saleStatus, int itemCount,
+                           boolean isVoided, LocalDateTime voidedAt, String voidedReason, String voidedByName) {
         this.saleId = saleId;
+        this.publicId = publicId;
         this.customerId = customerId;
         this.customerName = customerName;
         this.employmentId = employmentId;
@@ -30,10 +37,16 @@ public class SaleSummaryDto {
         this.total = total;
         this.saleStatus = saleStatus;
         this.itemCount = itemCount;
+        this.isVoided = isVoided;
+        this.voidedAt = voidedAt;
+        this.voidedReason = voidedReason;
+        this.voidedByName = voidedByName;
     }
 
     public UUID getSaleId() { return saleId; }
     public void setSaleId(UUID saleId) { this.saleId = saleId; }
+    public String getPublicId() { return publicId; }
+    public void setPublicId(String publicId) { this.publicId = publicId; }
     public UUID getCustomerId() { return customerId; }
     public void setCustomerId(UUID customerId) { this.customerId = customerId; }
     public String getCustomerName() { return customerName; }
@@ -50,4 +63,12 @@ public class SaleSummaryDto {
     public void setSaleStatus(String saleStatus) { this.saleStatus = saleStatus; }
     public int getItemCount() { return itemCount; }
     public void setItemCount(int itemCount) { this.itemCount = itemCount; }
+    public boolean isVoided() { return isVoided; }
+    public void setVoided(boolean voided) { isVoided = voided; }
+    public LocalDateTime getVoidedAt() { return voidedAt; }
+    public void setVoidedAt(LocalDateTime voidedAt) { this.voidedAt = voidedAt; }
+    public String getVoidedReason() { return voidedReason; }
+    public void setVoidedReason(String voidedReason) { this.voidedReason = voidedReason; }
+    public String getVoidedByName() { return voidedByName; }
+    public void setVoidedByName(String voidedByName) { this.voidedByName = voidedByName; }
 }

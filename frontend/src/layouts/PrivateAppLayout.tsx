@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { SidebarProvider, useSidebar } from "../contexts/SidebarContext";
 import { NotificationsProvider } from "../contexts/NotificationsContext";
 import { useAuth, useCurrentUser } from "../contexts/AuthContext";
@@ -15,6 +15,14 @@ function PrivateShell() {
   const { isCollapsed, isOpen, toggleCollapsed, toggleOpen, closeSidebar } = useSidebar();
   const authUser = useCurrentUser();
   const scrollRef = useScrollToTop<HTMLElement>();
+  const location = useLocation();
+
+  // Non-ACTIVE accounts still get the full shell (sidebar visible, top bar visible) —
+  // the sidebar just disables every link but Dashboard, and any other route bounces
+  // back to Dashboard, which itself shows the pending/suspended notice in place of
+  // its stats and charts. See AccountPendingNotice. ADMIN is exempt: it's the system's
+  // prime role and always has full access regardless of accountStatus.
+  const isRestricted = authUser.accountStatus !== "ACTIVE" && authUser.role !== "ADMIN";
 
   const user: UserProfile = {
     id: authUser.userId,
@@ -32,13 +40,18 @@ function PrivateShell() {
         onToggleCollapse={toggleCollapsed}
         mobileOpen={isOpen}
         onCloseMobile={closeSidebar}
+        restricted={isRestricted}
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <DashboardTopBar user={user} onOpenMobileSidebar={toggleOpen} />
 
         <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-          <AnimatedOutlet />
+          {isRestricted && location.pathname !== "/dashboard" ? (
+            <Navigate to="/dashboard" replace />
+          ) : (
+            <AnimatedOutlet />
+          )}
         </main>
       </div>
     </div>

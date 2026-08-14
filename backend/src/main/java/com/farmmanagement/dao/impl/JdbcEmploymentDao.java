@@ -27,6 +27,13 @@ public class JdbcEmploymentDao implements EmploymentDao {
         return result.stream().findFirst();
     }
 
+    public Optional<Employment> findActiveByUserId(UUID userId) {
+        List<Employment> result = jdbcTemplate.query(
+                "SELECT * FROM employment WHERE user_id = ? AND employment_status = 'ACTIVE' LIMIT 1",
+                BeanPropertyRowMapper.newInstance(Employment.class), userId);
+        return result.stream().findFirst();
+    }
+
     public Employment save(Employment item) {
         jdbcTemplate.update("INSERT INTO employment (employment_id, user_id, farm_id, role, salary, hire_date, employment_status) VALUES (?, ?, ?, ?, ?, ?, ?)", item.getEmploymentId(), item.getUserId(), item.getFarmId(), item.getRole(), item.getSalary(), item.getHireDate(), item.getEmploymentStatus());
         return item;

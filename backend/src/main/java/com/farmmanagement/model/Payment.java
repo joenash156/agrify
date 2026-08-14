@@ -7,6 +7,8 @@ import java.time.LocalDateTime;
 
 public class Payment {
     private UUID paymentId;
+    /** Human-facing sequential reference (e.g. "PAY-000001") — DB-generated, immutable once assigned. */
+    private String publicId;
     private UUID saleId;
     private BigDecimal amount;
     private String paymentMethod;
@@ -17,6 +19,8 @@ public class Payment {
 
     public UUID getPaymentId() { return paymentId; }
     public void setPaymentId(UUID paymentId) { this.paymentId = paymentId; }
+    public String getPublicId() { return publicId; }
+    public void setPublicId(String publicId) { this.publicId = publicId; }
     public UUID getSaleId() { return saleId; }
     public void setSaleId(UUID saleId) { this.saleId = saleId; }
     public BigDecimal getAmount() { return amount; }

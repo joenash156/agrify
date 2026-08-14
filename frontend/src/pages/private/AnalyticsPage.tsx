@@ -18,6 +18,7 @@ import { faCircle, faDownload } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { StatCard } from "../../components/dashboard/StatCard";
 import { PageHeader } from "../../components/common/PageHeader";
+import { DateRangeFilter, type DateRange } from "../../components/common/DateRangeFilter";
 import { downloadCsv } from "../../utils/exportCsv";
 import { getAnalyticsOverview, type AnalyticsOverview } from "../../services/analyticsService";
 
@@ -43,12 +44,13 @@ export default function AnalyticsPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
+  const [range, setRange] = useState<DateRange>({ preset: "ALL", from: null, to: null });
 
   useEffect(() => {
-    getAnalyticsOverview()
+    getAnalyticsOverview(range.from, range.to)
       .then(setOverview)
       .catch(() => setOverview(null));
-  }, []);
+  }, [range]);
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
@@ -105,6 +107,8 @@ export default function AnalyticsPage() {
         showAction={Boolean(overview)}
         onAction={handleDownload}
       />
+
+      <DateRangeFilter value={range} onChange={setRange} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat) => (

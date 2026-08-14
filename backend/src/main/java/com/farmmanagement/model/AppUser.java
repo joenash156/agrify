@@ -11,6 +11,10 @@ public class AppUser {
     private String email;
     private String phoneNumber;
     private String otherPhoneNumber;
+    /** Whether this person is currently working somewhere (ACTIVE/ON_LEAVE/SUSPENDED/TERMINATED),
+     * kept in sync with their employment record by EmploymentService — null until they're employed
+     * for the first time. Distinct from user_account.account_status, which gates login/portal access. */
+    private String workingStatus;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -28,6 +32,8 @@ public class AppUser {
     public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
     public String getOtherPhoneNumber() { return otherPhoneNumber; }
     public void setOtherPhoneNumber(String otherPhoneNumber) { this.otherPhoneNumber = otherPhoneNumber; }
+    public String getWorkingStatus() { return workingStatus; }
+    public void setWorkingStatus(String workingStatus) { this.workingStatus = workingStatus; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

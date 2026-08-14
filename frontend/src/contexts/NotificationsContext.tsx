@@ -22,7 +22,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     notificationService
       .findMine()
       .then(setNotifications)
-      .catch(() => setNotifications([]))
+      .catch((err) => {
+        console.error("Failed to load notifications", err);
+        setNotifications([]);
+      })
       .finally(() => setIsLoading(false));
   }, []);
 

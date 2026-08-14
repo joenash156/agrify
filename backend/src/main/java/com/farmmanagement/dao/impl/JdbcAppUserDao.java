@@ -18,8 +18,14 @@ public class JdbcAppUserDao implements AppUserDao {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    // Every consumer of this list (staff pickers on Attendance/POS/Sales, the Employees table)
+    // wants regular staff, never the system admin — ADMIN never has an employment record, so
+    // including it would only ever show up as a permanently-unplaceable phantom row.
     public List<AppUser> findAll() {
-        return jdbcTemplate.query("SELECT * FROM app_user", BeanPropertyRowMapper.newInstance(AppUser.class));
+        return jdbcTemplate.query(
+                "SELECT u.* FROM app_user u " +
+                        "WHERE NOT EXISTS (SELECT 1 FROM user_account a WHERE a.user_id = u.user_id AND a.role = 'ADMIN')",
+                BeanPropertyRowMapper.newInstance(AppUser.class));
     }
 
     public Optional<AppUser> findById(UUID id) {
@@ -38,5 +44,9 @@ public class JdbcAppUserDao implements AppUserDao {
 
     public boolean delete(UUID id) {
         return jdbcTemplate.update("DELETE FROM app_user WHERE user_id = ?", id) > 0;
+    }
+
+    public void updateWorkingStatus(UUID userId, String workingStatus) {
+        jdbcTemplate.update("UPDATE app_user SET working_status = ? WHERE user_id = ?", workingStatus, userId);
     }
 }

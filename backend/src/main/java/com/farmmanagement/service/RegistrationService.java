@@ -25,7 +25,10 @@ public class RegistrationService {
         appUserDao.save(user);
         UserAccount account=new UserAccount();
         account.setAccountId(java.util.UUID.randomUUID()); account.setUserId(user.getUserId()); account.setUsername(dto.getUsername());
-        account.setPasswordHash(passwordEncoder.encode(dto.getPassword())); account.setAccountStatus("ACTIVE"); account.setRole("WORKER");
+        // New self-registrations start INACTIVE — an admin must activate + assign them
+        // a farm/role/salary (see UserAccountController + EmploymentController) before
+        // they can do anything beyond logging in and seeing the pending-activation screen.
+        account.setPasswordHash(passwordEncoder.encode(dto.getPassword())); account.setAccountStatus("INACTIVE"); account.setRole("WORKER");
         userAccountDao.create(account);
     }
 }

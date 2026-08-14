@@ -72,8 +72,10 @@ function withColors(rows: ChartRow[]): ChartRow[] {
   return rows.map((row) => ({ ...row, color: STATUS_COLORS[String(row.name ?? "")] ?? "#14b8a6" }));
 }
 
-export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
-  const { data } = await httpClient.get<OverviewResponse>("/analytics/overview");
+export async function getAnalyticsOverview(from?: string | null, to?: string | null): Promise<AnalyticsOverview> {
+  const { data } = await httpClient.get<OverviewResponse>("/analytics/overview", {
+    params: { from: from ?? undefined, to: to ?? undefined },
+  });
   const charts = data.charts;
   return {
     stats: data.stats.map(toStatCardData),

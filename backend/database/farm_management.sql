@@ -11,6 +11,15 @@
 -- 22=attendance, 23=notification) followed by a sequential suffix. This
 -- keeps every foreign key traceable by eye while remaining a valid UUID
 -- string (required — the Java layer binds these columns to java.util.UUID).
+--
+-- MySQL 8 has no native UUID column type (that's MariaDB 10.7+ only), so
+-- every internal id stays CHAR(36) — but each one carries a
+-- CHECK (IS_UUID(...)) constraint so the column is provably UUID-shaped at
+-- the database level even though DESCRIBE still reports char(36).
+--
+-- sale.public_id / payment.public_id are the one exception: human-facing
+-- sequential references ("SL-000001", "PL-000001"), generated from a
+-- backing AUTO_INCREMENT column, deliberately NOT UUIDs.
 -- --------------------------------------------------------
 
 SET NAMES utf8mb4;
@@ -54,10 +63,16 @@ CREATE TABLE `app_user` (
   `email` VARCHAR(150) NOT NULL,
   `phone_number` VARCHAR(30) DEFAULT NULL,
   `other_phone_number` VARCHAR(30) DEFAULT NULL,
+  -- Whether this person is currently working somewhere (ACTIVE/ON_LEAVE/SUSPENDED/TERMINATED) —
+  -- kept in sync with their employment record by EmploymentService; NULL until first employed.
+  -- Distinct from user_account.account_status, which gates login/portal access.
+  `working_status` VARCHAR(20) DEFAULT NULL,
   `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`user_id`),
-  UNIQUE KEY `uq_app_user_email` (`email`)
+  UNIQUE KEY `uq_app_user_email` (`email`),
+  CONSTRAINT `chk_app_user_working_status` CHECK (`working_status` IS NULL OR `working_status` IN ('ACTIVE','ON_LEAVE','SUSPENDED','TERMINATED')),
+  CONSTRAINT `chk_uuid_app_user_user_id` CHECK (IS_UUID(`user_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `app_user` (`user_id`, `first_name`, `last_name`, `email`, `phone_number`, `other_phone_number`) VALUES
@@ -94,7 +109,9 @@ CREATE TABLE `user_account` (
   KEY `idx_user_account_refresh_hash` (`refresh_token_hash`),
   CONSTRAINT `fk_account_user` FOREIGN KEY (`user_id`) REFERENCES `app_user` (`user_id`),
   CONSTRAINT `chk_account_status` CHECK (`account_status` IN ('ACTIVE','INACTIVE','SUSPENDED')),
-  CONSTRAINT `chk_account_role` CHECK (`role` IN ('ADMIN','FARM_MANAGER','SALES_PERSON','WORKER'))
+  CONSTRAINT `chk_account_role` CHECK (`role` IN ('ADMIN','FARM_MANAGER','SALES_PERSON','WORKER')),
+  CONSTRAINT `chk_uuid_user_account_account_id` CHECK (IS_UUID(`account_id`)),
+  CONSTRAINT `chk_uuid_user_account_user_id` CHECK (IS_UUID(`user_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Intentionally no seed rows here — demo accounts (admin + one per role) are
@@ -114,7 +131,8 @@ CREATE TABLE `farm` (
   `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`farm_id`),
   CONSTRAINT `chk_farm_size` CHECK (`size` > 0),
-  CONSTRAINT `chk_farm_status` CHECK (`farm_status` IN ('ACTIVE','SEASONAL','INACTIVE','FALLOW'))
+  CONSTRAINT `chk_farm_status` CHECK (`farm_status` IN ('ACTIVE','SEASONAL','INACTIVE','FALLOW')),
+  CONSTRAINT `chk_uuid_farm_farm_id` CHECK (IS_UUID(`farm_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `farm` (`farm_id`, `farm_name`, `location`, `size`, `farm_status`) VALUES
@@ -136,7 +154,8 @@ CREATE TABLE `customer` (
   `email` VARCHAR(150) DEFAULT NULL,
   `address` VARCHAR(255) DEFAULT NULL,
   PRIMARY KEY (`customer_id`),
-  UNIQUE KEY `uq_customer_email` (`email`)
+  UNIQUE KEY `uq_customer_email` (`email`),
+  CONSTRAINT `chk_uuid_customer_customer_id` CHECK (IS_UUID(`customer_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `customer` (`customer_id`, `first_name`, `last_name`, `phone_number`, `email`, `address`) VALUES
@@ -166,7 +185,10 @@ CREATE TABLE `employment` (
   CONSTRAINT `fk_employment_user` FOREIGN KEY (`user_id`) REFERENCES `app_user` (`user_id`),
   CONSTRAINT `fk_employment_farm` FOREIGN KEY (`farm_id`) REFERENCES `farm` (`farm_id`),
   CONSTRAINT `chk_salary` CHECK (`salary` >= 0),
-  CONSTRAINT `chk_employment_status` CHECK (`employment_status` IN ('ACTIVE','ON_LEAVE','SUSPENDED','TERMINATED'))
+  CONSTRAINT `chk_employment_status` CHECK (`employment_status` IN ('ACTIVE','ON_LEAVE','SUSPENDED','TERMINATED')),
+  CONSTRAINT `chk_uuid_employment_employment_id` CHECK (IS_UUID(`employment_id`)),
+  CONSTRAINT `chk_uuid_employment_user_id` CHECK (IS_UUID(`user_id`)),
+  CONSTRAINT `chk_uuid_employment_farm_id` CHECK (IS_UUID(`farm_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `employment` (`employment_id`, `user_id`, `farm_id`, `role`, `salary`, `hire_date`, `employment_status`) VALUES
@@ -181,6 +203,12 @@ INSERT INTO `employment` (`employment_id`, `user_id`, `farm_id`, `role`, `salary
 ('12000000-0000-0000-0000-000000000009', '11000000-0000-0000-0000-000000000009', '10000000-0000-0000-0000-000000000006', 'Field Worker', 2200.00, '2025-03-20', 'SUSPENDED'),
 ('12000000-0000-0000-0000-000000000010', '11000000-0000-0000-0000-000000000010', '10000000-0000-0000-0000-000000000003', 'Farm Manager', 4500.00, '2025-04-01', 'ACTIVE');
 
+-- Keep app_user.working_status in sync with each seeded employee's employment_status —
+-- mirrors what EmploymentService does at runtime whenever employment changes.
+UPDATE `app_user` u
+JOIN `employment` e ON e.user_id = u.user_id
+SET u.working_status = e.employment_status;
+
 -- --------------------------------------------------------
 -- attendance
 -- --------------------------------------------------------
@@ -194,7 +222,9 @@ CREATE TABLE `attendance` (
   PRIMARY KEY (`attendance_id`),
   UNIQUE KEY `uq_attendance_employment_date` (`employment_id`,`attendance_date`),
   CONSTRAINT `fk_attendance_employment` FOREIGN KEY (`employment_id`) REFERENCES `employment` (`employment_id`),
-  CONSTRAINT `chk_attendance_status` CHECK (`attendance_status` IN ('PRESENT','ABSENT','LATE','LEAVE'))
+  CONSTRAINT `chk_attendance_status` CHECK (`attendance_status` IN ('PRESENT','ABSENT','LATE','LEAVE')),
+  CONSTRAINT `chk_uuid_attendance_attendance_id` CHECK (IS_UUID(`attendance_id`)),
+  CONSTRAINT `chk_uuid_attendance_employment_id` CHECK (IS_UUID(`employment_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `attendance` (`attendance_id`, `employment_id`, `attendance_date`, `check_in`, `check_out`, `attendance_status`) VALUES
@@ -217,7 +247,8 @@ CREATE TABLE `disease` (
   `disease_name` VARCHAR(100) NOT NULL,
   `description` VARCHAR(500) DEFAULT NULL,
   PRIMARY KEY (`disease_id`),
-  UNIQUE KEY `uq_disease_name` (`disease_name`)
+  UNIQUE KEY `uq_disease_name` (`disease_name`),
+  CONSTRAINT `chk_uuid_disease_disease_id` CHECK (IS_UUID(`disease_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `disease` (`disease_id`, `disease_name`, `description`) VALUES
@@ -244,7 +275,9 @@ CREATE TABLE `crop` (
   PRIMARY KEY (`crop_id`),
   KEY `idx_crop_farm` (`farm_id`),
   CONSTRAINT `fk_crop_farm` FOREIGN KEY (`farm_id`) REFERENCES `farm` (`farm_id`),
-  CONSTRAINT `chk_crop_status` CHECK (`crop_status` IN ('GROWING','READY','HARVESTED','DISEASED','DORMANT'))
+  CONSTRAINT `chk_crop_status` CHECK (`crop_status` IN ('GROWING','READY','HARVESTED','DISEASED','DORMANT')),
+  CONSTRAINT `chk_uuid_crop_crop_id` CHECK (IS_UUID(`crop_id`)),
+  CONSTRAINT `chk_uuid_crop_farm_id` CHECK (IS_UUID(`farm_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `crop` (`crop_id`, `farm_id`, `crop_name`, `crop_variety`, `planting_date`, `expected_harvest_date`, `crop_status`) VALUES
@@ -275,7 +308,10 @@ CREATE TABLE `crop_disease` (
   KEY `idx_crop_disease_disease` (`disease_id`),
   CONSTRAINT `fk_crop_disease_crop` FOREIGN KEY (`crop_id`) REFERENCES `crop` (`crop_id`),
   CONSTRAINT `fk_crop_disease_disease` FOREIGN KEY (`disease_id`) REFERENCES `disease` (`disease_id`),
-  CONSTRAINT `chk_severity` CHECK (`severity` IN ('LOW','MEDIUM','HIGH','CRITICAL'))
+  CONSTRAINT `chk_severity` CHECK (`severity` IN ('LOW','MEDIUM','HIGH','CRITICAL')),
+  CONSTRAINT `chk_uuid_crop_disease_crop_disease_id` CHECK (IS_UUID(`crop_disease_id`)),
+  CONSTRAINT `chk_uuid_crop_disease_crop_id` CHECK (IS_UUID(`crop_id`)),
+  CONSTRAINT `chk_uuid_crop_disease_disease_id` CHECK (IS_UUID(`disease_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `crop_disease` (`crop_disease_id`, `crop_id`, `disease_id`, `detected_date`, `severity`, `treatment`) VALUES
@@ -300,7 +336,9 @@ CREATE TABLE `equipment` (
   KEY `idx_equipment_farm` (`farm_id`),
   CONSTRAINT `fk_equipment_farm` FOREIGN KEY (`farm_id`) REFERENCES `farm` (`farm_id`),
   CONSTRAINT `chk_equipment_cost` CHECK (`purchase_cost` IS NULL OR `purchase_cost` >= 0),
-  CONSTRAINT `chk_equipment_status` CHECK (`equipment_status` IN ('AVAILABLE','IN_USE','MAINTENANCE','BROKEN','RETIRED'))
+  CONSTRAINT `chk_equipment_status` CHECK (`equipment_status` IN ('AVAILABLE','IN_USE','MAINTENANCE','BROKEN','RETIRED')),
+  CONSTRAINT `chk_uuid_equipment_equipment_id` CHECK (IS_UUID(`equipment_id`)),
+  CONSTRAINT `chk_uuid_equipment_farm_id` CHECK (IS_UUID(`farm_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `equipment` (`equipment_id`, `farm_id`, `equipment_name`, `equipment_type`, `purchase_date`, `purchase_cost`, `equipment_status`) VALUES
@@ -326,7 +364,9 @@ CREATE TABLE `equipment_maintenance` (
   PRIMARY KEY (`maintenance_id`),
   KEY `idx_maintenance_equipment` (`equipment_id`),
   CONSTRAINT `fk_maintenance_equipment` FOREIGN KEY (`equipment_id`) REFERENCES `equipment` (`equipment_id`),
-  CONSTRAINT `chk_maintenance_cost` CHECK (`cost` >= 0)
+  CONSTRAINT `chk_maintenance_cost` CHECK (`cost` >= 0),
+  CONSTRAINT `chk_uuid_equipment_maintenance_maintenance_id` CHECK (IS_UUID(`maintenance_id`)),
+  CONSTRAINT `chk_uuid_equipment_maintenance_equipment_id` CHECK (IS_UUID(`equipment_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `equipment_maintenance` (`maintenance_id`, `equipment_id`, `maintenance_date`, `maintenance_type`, `cost`, `description`) VALUES
@@ -351,7 +391,10 @@ CREATE TABLE `equipment_usage` (
   KEY `idx_usage_employment` (`employment_id`),
   CONSTRAINT `fk_usage_equipment` FOREIGN KEY (`equipment_id`) REFERENCES `equipment` (`equipment_id`),
   CONSTRAINT `fk_usage_employment` FOREIGN KEY (`employment_id`) REFERENCES `employment` (`employment_id`),
-  CONSTRAINT `chk_hours_used` CHECK (`hours_used` > 0)
+  CONSTRAINT `chk_hours_used` CHECK (`hours_used` > 0),
+  CONSTRAINT `chk_uuid_equipment_usage_usage_id` CHECK (IS_UUID(`usage_id`)),
+  CONSTRAINT `chk_uuid_equipment_usage_equipment_id` CHECK (IS_UUID(`equipment_id`)),
+  CONSTRAINT `chk_uuid_equipment_usage_employment_id` CHECK (IS_UUID(`employment_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `equipment_usage` (`usage_id`, `equipment_id`, `employment_id`, `usage_date`, `hours_used`) VALUES
@@ -376,7 +419,8 @@ CREATE TABLE `fertilizer` (
   PRIMARY KEY (`fertilizer_id`),
   UNIQUE KEY `uq_fertilizer_name` (`fertilizer_name`),
   CONSTRAINT `chk_fertilizer_price` CHECK (`unit_price` >= 0),
-  CONSTRAINT `chk_fertilizer_quantity` CHECK (`quantity` >= 0)
+  CONSTRAINT `chk_fertilizer_quantity` CHECK (`quantity` >= 0),
+  CONSTRAINT `chk_uuid_fertilizer_fertilizer_id` CHECK (IS_UUID(`fertilizer_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `fertilizer` (`fertilizer_id`, `fertilizer_name`, `fertilizer_type`, `unit_price`, `quantity`) VALUES
@@ -405,7 +449,11 @@ CREATE TABLE `fertilizer_application` (
   CONSTRAINT `fk_application_crop` FOREIGN KEY (`crop_id`) REFERENCES `crop` (`crop_id`),
   CONSTRAINT `fk_application_employment` FOREIGN KEY (`employment_id`) REFERENCES `employment` (`employment_id`),
   CONSTRAINT `fk_application_fertilizer` FOREIGN KEY (`fertilizer_id`) REFERENCES `fertilizer` (`fertilizer_id`),
-  CONSTRAINT `chk_application_quantity` CHECK (`quantity` > 0)
+  CONSTRAINT `chk_application_quantity` CHECK (`quantity` > 0),
+  CONSTRAINT `chk_uuid_fertilizer_application_application_id` CHECK (IS_UUID(`application_id`)),
+  CONSTRAINT `chk_uuid_fertilizer_application_crop_id` CHECK (IS_UUID(`crop_id`)),
+  CONSTRAINT `chk_uuid_fertilizer_application_employment_id` CHECK (IS_UUID(`employment_id`)),
+  CONSTRAINT `chk_uuid_fertilizer_application_fertilizer_id` CHECK (IS_UUID(`fertilizer_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `fertilizer_application` (`application_id`, `crop_id`, `employment_id`, `fertilizer_id`, `application_date`, `quantity`, `notes`) VALUES
@@ -430,7 +478,9 @@ CREATE TABLE `fertilizer_transaction` (
   KEY `idx_fert_transaction_fertilizer` (`fertilizer_id`),
   CONSTRAINT `fk_fert_transaction_fertilizer` FOREIGN KEY (`fertilizer_id`) REFERENCES `fertilizer` (`fertilizer_id`),
   CONSTRAINT `chk_fertilizer_transaction_type` CHECK (`transaction_type` IN ('PURCHASE','USAGE','ADJUSTMENT')),
-  CONSTRAINT `chk_fertilizer_transaction_qty` CHECK (`quantity` > 0)
+  CONSTRAINT `chk_fertilizer_transaction_qty` CHECK (`quantity` > 0),
+  CONSTRAINT `chk_uuid_fertilizer_transaction_transaction_id` CHECK (IS_UUID(`transaction_id`)),
+  CONSTRAINT `chk_uuid_fertilizer_transaction_fertilizer_id` CHECK (IS_UUID(`fertilizer_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `fertilizer_transaction` (`transaction_id`, `fertilizer_id`, `transaction_type`, `quantity`, `unit_price`, `transaction_date`) VALUES
@@ -455,7 +505,9 @@ CREATE TABLE `harvest` (
   KEY `idx_harvest_crop` (`crop_id`),
   CONSTRAINT `fk_harvest_crop` FOREIGN KEY (`crop_id`) REFERENCES `crop` (`crop_id`),
   CONSTRAINT `chk_harvest_quantity` CHECK (`quantity` > 0),
-  CONSTRAINT `chk_harvest_grade` CHECK (`quality_grade` IN ('PREMIUM','STANDARD','SUBSTANDARD'))
+  CONSTRAINT `chk_harvest_grade` CHECK (`quality_grade` IN ('PREMIUM','STANDARD','SUBSTANDARD')),
+  CONSTRAINT `chk_uuid_harvest_harvest_id` CHECK (IS_UUID(`harvest_id`)),
+  CONSTRAINT `chk_uuid_harvest_crop_id` CHECK (IS_UUID(`crop_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `harvest` (`harvest_id`, `crop_id`, `harvest_date`, `quantity`, `unit`, `quality_grade`) VALUES
@@ -479,7 +531,9 @@ CREATE TABLE `inventory` (
   PRIMARY KEY (`inventory_id`),
   KEY `idx_inventory_harvest` (`harvest_id`),
   CONSTRAINT `fk_inventory_harvest` FOREIGN KEY (`harvest_id`) REFERENCES `harvest` (`harvest_id`),
-  CONSTRAINT `chk_inventory_qty` CHECK (`quantity` >= 0)
+  CONSTRAINT `chk_inventory_qty` CHECK (`quantity` >= 0),
+  CONSTRAINT `chk_uuid_inventory_inventory_id` CHECK (IS_UUID(`inventory_id`)),
+  CONSTRAINT `chk_uuid_inventory_harvest_id` CHECK (IS_UUID(`harvest_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `inventory` (`inventory_id`, `harvest_id`, `item_name`, `quantity`, `unit`, `storage_location`) VALUES
@@ -503,7 +557,9 @@ CREATE TABLE `inventory_transaction` (
   KEY `idx_inv_transaction_inventory` (`inventory_id`),
   CONSTRAINT `fk_inv_transaction_inventory` FOREIGN KEY (`inventory_id`) REFERENCES `inventory` (`inventory_id`),
   CONSTRAINT `chk_inventory_transaction_type` CHECK (`transaction_type` IN ('IN','OUT','ADJUSTMENT')),
-  CONSTRAINT `chk_inventory_transaction_qty` CHECK (`quantity` > 0)
+  CONSTRAINT `chk_inventory_transaction_qty` CHECK (`quantity` > 0),
+  CONSTRAINT `chk_uuid_inventory_transaction_transaction_id` CHECK (IS_UUID(`transaction_id`)),
+  CONSTRAINT `chk_uuid_inventory_transaction_inventory_id` CHECK (IS_UUID(`inventory_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -512,18 +568,35 @@ CREATE TABLE `inventory_transaction` (
 -- --------------------------------------------------------
 CREATE TABLE `sale` (
   `sale_id` CHAR(36) NOT NULL,
+  -- sale_seq is the real generated-key column; public_id is the formatted display string
+  -- ("SL-000001") the app computes from it at insert time. public_id starts nullable/unindexed
+  -- here — see the UNIQUE key + NOT NULL added by ALTER TABLE after the seed rows below are
+  -- backfilled, which avoids every seed row racing for the same default value.
+  `sale_seq` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `public_id` VARCHAR(20) DEFAULT NULL,
   `customer_id` CHAR(36) DEFAULT NULL,
   `employment_id` CHAR(36) NOT NULL,
   `sale_date` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `total` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
   `sale_status` VARCHAR(20) NOT NULL DEFAULT 'UNPAID',
+  `is_voided` TINYINT(1) NOT NULL DEFAULT 0,
+  `is_voided_at` DATETIME DEFAULT NULL,
+  `voided_reason` VARCHAR(500) DEFAULT NULL,
+  `voided_by` CHAR(36) DEFAULT NULL,
   PRIMARY KEY (`sale_id`),
+  UNIQUE KEY `uq_sale_seq` (`sale_seq`),
   KEY `idx_sale_customer` (`customer_id`),
   KEY `idx_sale_employment` (`employment_id`),
+  KEY `idx_sale_voided_by` (`voided_by`),
   CONSTRAINT `fk_sale_customer` FOREIGN KEY (`customer_id`) REFERENCES `customer` (`customer_id`),
   CONSTRAINT `fk_sale_employment` FOREIGN KEY (`employment_id`) REFERENCES `employment` (`employment_id`),
+  CONSTRAINT `fk_sale_voided_by` FOREIGN KEY (`voided_by`) REFERENCES `app_user` (`user_id`),
   CONSTRAINT `chk_sale_total` CHECK (`total` >= 0),
-  CONSTRAINT `chk_sale_status` CHECK (`sale_status` IN ('UNPAID','PARTIALLY_PAID','PAID','CANCELLED'))
+  CONSTRAINT `chk_sale_status` CHECK (`sale_status` IN ('UNPAID','PARTIALLY_PAID','PAID','CANCELLED')),
+  CONSTRAINT `chk_uuid_sale_sale_id` CHECK (IS_UUID(`sale_id`)),
+  CONSTRAINT `chk_uuid_sale_customer_id` CHECK (`customer_id` IS NULL OR IS_UUID(`customer_id`)),
+  CONSTRAINT `chk_uuid_sale_employment_id` CHECK (IS_UUID(`employment_id`)),
+  CONSTRAINT `chk_uuid_sale_voided_by` CHECK (`voided_by` IS NULL OR IS_UUID(`voided_by`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `sale` (`sale_id`, `customer_id`, `employment_id`, `sale_date`, `total`, `sale_status`) VALUES
@@ -533,6 +606,13 @@ INSERT INTO `sale` (`sale_id`, `customer_id`, `employment_id`, `sale_date`, `tot
 ('1f000000-0000-0000-0000-000000000004', '1e000000-0000-0000-0000-000000000004', '12000000-0000-0000-0000-000000000002', '2026-08-10 16:40:00', 760.00, 'UNPAID'),
 ('1f000000-0000-0000-0000-000000000005', '1e000000-0000-0000-0000-000000000005', '12000000-0000-0000-0000-000000000008', '2026-08-10 11:30:00', 840.00, 'UNPAID'),
 ('1f000000-0000-0000-0000-000000000006', '1e000000-0000-0000-0000-000000000006', '12000000-0000-0000-0000-000000000002', '2026-08-09 15:00:00', 0.00, 'CANCELLED');
+
+-- Backfill sale.public_id from the sale_seq every row just got auto-assigned (in insertion
+-- order, same as JdbcSaleDao.save() does for rows created at runtime), then lock it down.
+UPDATE `sale` SET `public_id` = CONCAT('SL-', LPAD(`sale_seq`, 6, '0'));
+ALTER TABLE `sale`
+  MODIFY COLUMN `public_id` VARCHAR(20) NOT NULL,
+  ADD UNIQUE KEY `uq_sale_public_id` (`public_id`);
 
 -- --------------------------------------------------------
 -- sale_item — inserted via plain INSERT here (not the stored procedure) so
@@ -553,7 +633,10 @@ CREATE TABLE `sale_item` (
   CONSTRAINT `fk_sale_item_inventory` FOREIGN KEY (`inventory_id`) REFERENCES `inventory` (`inventory_id`),
   CONSTRAINT `chk_sale_item_quantity` CHECK (`quantity` > 0),
   CONSTRAINT `chk_sale_item_price` CHECK (`unit_price` >= 0),
-  CONSTRAINT `chk_sale_item_subtotal` CHECK (`subtotal` >= 0)
+  CONSTRAINT `chk_sale_item_subtotal` CHECK (`subtotal` >= 0),
+  CONSTRAINT `chk_uuid_sale_item_sale_item_id` CHECK (IS_UUID(`sale_item_id`)),
+  CONSTRAINT `chk_uuid_sale_item_sale_id` CHECK (IS_UUID(`sale_id`)),
+  CONSTRAINT `chk_uuid_sale_item_inventory_id` CHECK (IS_UUID(`inventory_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -561,16 +644,22 @@ CREATE TABLE `sale_item` (
 -- --------------------------------------------------------
 CREATE TABLE `payment` (
   `payment_id` CHAR(36) NOT NULL,
+  -- Same generated-key + formatted-string pattern as sale.sale_seq/public_id above.
+  `payment_seq` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `public_id` VARCHAR(20) DEFAULT NULL,
   `sale_id` CHAR(36) NOT NULL,
   `amount` DECIMAL(12,2) NOT NULL,
   `payment_method` VARCHAR(30) NOT NULL,
   `payment_status` VARCHAR(20) NOT NULL DEFAULT 'PENDING',
   `payment_date` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`payment_id`),
+  UNIQUE KEY `uq_payment_seq` (`payment_seq`),
   KEY `idx_payment_sale` (`sale_id`),
   CONSTRAINT `fk_payment_sale` FOREIGN KEY (`sale_id`) REFERENCES `sale` (`sale_id`),
   CONSTRAINT `chk_payment_amount` CHECK (`amount` > 0),
-  CONSTRAINT `chk_payment_status` CHECK (`payment_status` IN ('PENDING','CONFIRMED','FAILED','REFUNDED'))
+  CONSTRAINT `chk_payment_status` CHECK (`payment_status` IN ('PENDING','CONFIRMED','FAILED','REFUNDED')),
+  CONSTRAINT `chk_uuid_payment_payment_id` CHECK (IS_UUID(`payment_id`)),
+  CONSTRAINT `chk_uuid_payment_sale_id` CHECK (IS_UUID(`sale_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -588,7 +677,9 @@ CREATE TABLE `notification` (
   PRIMARY KEY (`notification_id`),
   KEY `idx_notification_user` (`user_id`),
   CONSTRAINT `fk_notification_user` FOREIGN KEY (`user_id`) REFERENCES `app_user` (`user_id`),
-  CONSTRAINT `chk_notification_category` CHECK (`category` IN ('SALE','HARVEST','DISEASE','EQUIPMENT','ATTENDANCE','PAYMENT','SYSTEM'))
+  CONSTRAINT `chk_notification_category` CHECK (`category` IN ('SALE','HARVEST','DISEASE','EQUIPMENT','ATTENDANCE','PAYMENT','SYSTEM')),
+  CONSTRAINT `chk_uuid_notification_notification_id` CHECK (IS_UUID(`notification_id`)),
+  CONSTRAINT `chk_uuid_notification_user_id` CHECK (IS_UUID(`user_id`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `notification` (`notification_id`, `user_id`, `category`, `title`, `message`, `is_read`, `created_at`) VALUES
@@ -732,5 +823,11 @@ INSERT INTO `payment` (`payment_id`, `sale_id`, `amount`, `payment_method`, `pay
 ('21000000-0000-0000-0000-000000000004', '1f000000-0000-0000-0000-000000000004', 760.00, 'Mobile Money', 'PENDING', '2026-08-10 16:45:00'),
 ('21000000-0000-0000-0000-000000000005', '1f000000-0000-0000-0000-000000000005', 840.00, 'Cash', 'FAILED', '2026-08-10 11:35:00'),
 ('21000000-0000-0000-0000-000000000006', '1f000000-0000-0000-0000-000000000002', 500.00, 'Bank Transfer', 'CONFIRMED', '2026-08-12 10:00:00');
+
+-- Same backfill-then-lock-down pattern as sale.public_id above.
+UPDATE `payment` SET `public_id` = CONCAT('PL-', LPAD(`payment_seq`, 6, '0'));
+ALTER TABLE `payment`
+  MODIFY COLUMN `public_id` VARCHAR(20) NOT NULL,
+  ADD UNIQUE KEY `uq_payment_public_id` (`public_id`);
 
 SET FOREIGN_KEY_CHECKS = 1;
