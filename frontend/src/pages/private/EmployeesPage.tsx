@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faUsers, faTractor, faCalendarDay, faCircleCheck, faClock, faCreditCard } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -9,12 +9,15 @@ import { ListToolbar } from "../../components/common/ListToolbar";
 import { EntityCard } from "../../components/common/EntityCard";
 import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
+import { EntityFormModal, type FieldConfig, type FieldValue } from "../../components/common/EntityFormModal";
+import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
-import { employeeService } from "../../services/employeeService";
-import { appUserService } from "../../services/appUserService";
+import { employeeService, type EmploymentRecordDto } from "../../services/employeeService";
+import { appUserService, type AppUser } from "../../services/appUserService";
 import { farmService } from "../../services/farmService";
+import type { Farm } from "../../types/farm";
 import type { Employee } from "../../types/employee";
 import type { StatCardData } from "../../types/dashboard";
 
@@ -26,6 +29,15 @@ const STATUS_FILTERS: Array<Employee["employmentStatus"] | "ALL"> = [
   "TERMINATED",
 ];
 
+const EMPLOYMENT_STATUS_OPTIONS = [
+  { value: "ACTIVE", label: "Active" },
+  { value: "ON_LEAVE", label: "On Leave" },
+  { value: "SUSPENDED", label: "Suspended" },
+  { value: "TERMINATED", label: "Terminated" },
+];
+
+type ModalState = { mode: "create" | "edit" | "view"; record?: Employee };
+
 export default function EmployeesPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -34,15 +46,23 @@ export default function EmployeesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Employee["employmentStatus"] | "ALL">("ALL");
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employments, setEmployments] = useState<EmploymentRecordDto[]>([]);
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [farms, setFarms] = useState<Farm[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [modal, setModal] = useState<ModalState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null);
 
-  useEffect(() => {
-    Promise.all([employeeService.findAll(), appUserService.findAll(), farmService.findAll()])
-      .then(([employments, users, farms]) => {
-        const userById = new Map(users.map((u) => [u.userId, u]));
-        const farmNameById = new Map(farms.map((f) => [f.farmId, f.farmName]));
+  const loadEmployees = useCallback(() => {
+    return Promise.all([employeeService.findAll(), appUserService.findAll(), farmService.findAll()])
+      .then(([employmentList, userList, farmList]) => {
+        setEmployments(employmentList);
+        setUsers(userList);
+        setFarms(farmList);
+        const userById = new Map(userList.map((u) => [u.userId, u]));
+        const farmNameById = new Map(farmList.map((f) => [f.farmId, f.farmName]));
         setEmployees(
-          employments.map((employment) => {
+          employmentList.map((employment) => {
             const user = userById.get(employment.userId);
             return {
               employmentId: employment.employmentId,
@@ -60,9 +80,59 @@ export default function EmployeesPage() {
           })
         );
       })
-      .catch(() => setEmployees([]))
-      .finally(() => setIsLoading(false));
+      .catch(() => setEmployees([]));
   }, []);
+
+  useEffect(() => {
+    loadEmployees().finally(() => setIsLoading(false));
+  }, [loadEmployees]);
+
+  const employeeFields: FieldConfig[] = useMemo(
+    () => [
+      {
+        name: "userId",
+        label: "Person",
+        type: "select",
+        required: true,
+        options: users.map((u) => ({ value: u.userId, label: `${u.firstName} ${u.lastName} (${u.email})` })),
+      },
+      {
+        name: "farmId",
+        label: "Farm",
+        type: "select",
+        required: true,
+        options: farms.map((f) => ({ value: f.farmId, label: f.farmName })),
+      },
+      { name: "role", label: "Job Title", type: "text", required: true, placeholder: "e.g. Field Supervisor" },
+      { name: "salary", label: "Salary (₵)", type: "number", required: true, step: "0.01" },
+      { name: "hireDate", label: "Hire Date", type: "date", required: true },
+      { name: "employmentStatus", label: "Status", type: "select", required: true, options: EMPLOYMENT_STATUS_OPTIONS },
+    ],
+    [users, farms]
+  );
+
+  const handleSubmit = async (values: Record<string, FieldValue>) => {
+    const payload = {
+      userId: String(values.userId),
+      farmId: String(values.farmId),
+      role: String(values.role),
+      salary: Number(values.salary),
+      hireDate: String(values.hireDate),
+      employmentStatus: values.employmentStatus as Employee["employmentStatus"],
+    };
+    if (modal?.mode === "edit" && modal.record) {
+      await employeeService.update(modal.record.employmentId, payload);
+    } else {
+      await employeeService.create(payload);
+    }
+    await loadEmployees();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await employeeService.remove(deleteTarget.employmentId);
+    await loadEmployees();
+  };
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
@@ -98,7 +168,7 @@ export default function EmployeesPage() {
         subtitle="Manage farm staff, roles, and employment status."
         actionLabel="Add Employee"
         showAction={canManage}
-        onAction={() => alert("Adding an employee will be available once the backend is connected.")}
+        onAction={() => setModal({ mode: "create" })}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -179,7 +249,13 @@ export default function EmployeesPage() {
                     <StatusBadge status={employee.employmentStatus} variant="employment" />
                   </td>
                   <td className="px-5 py-3.5">
-                    <RowActions canManage={canManage} entityLabel="employee" />
+                    <RowActions
+                      canManage={canManage}
+                      entityLabel="employee"
+                      onView={() => setModal({ mode: "view", record: employee })}
+                      onEdit={() => setModal({ mode: "edit", record: employee })}
+                      onDelete={() => setDeleteTarget(employee)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -200,6 +276,9 @@ export default function EmployeesPage() {
             badge={<StatusBadge status={employee.employmentStatus} variant="employment" />}
             canManage={canManage}
             entityLabel="employee"
+            onView={() => setModal({ mode: "view", record: employee })}
+            onEdit={() => setModal({ mode: "edit", record: employee })}
+            onDelete={() => setDeleteTarget(employee)}
             fields={[
               { label: "Hired", value: formatDate(employee.hireDate) },
               { label: "Salary", value: `₵ ${employee.salary.toLocaleString()}` },
@@ -208,6 +287,40 @@ export default function EmployeesPage() {
         ))}
         {!isLoading && filteredEmployees.length === 0 && <EmptyState title="No employees found" />}
       </div>
+
+      <EntityFormModal
+        isOpen={modal !== null}
+        onClose={() => setModal(null)}
+        title={modal?.mode === "edit" ? "Edit Employee" : modal?.mode === "view" ? "Employee Details" : "Add Employee"}
+        fields={employeeFields}
+        initialValues={
+          modal?.record
+            ? {
+                userId: modal.record.userId,
+                farmId: employments.find((e) => e.employmentId === modal.record?.employmentId)?.farmId ?? "",
+                role: modal.record.jobTitle,
+                salary: modal.record.salary,
+                hireDate: modal.record.hireDate,
+                employmentStatus: modal.record.employmentStatus,
+              }
+            : { userId: "", farmId: "", role: "", salary: "", hireDate: "", employmentStatus: "ACTIVE" }
+        }
+        onSubmit={handleSubmit}
+        submitLabel={modal?.mode === "edit" ? "Save Changes" : "Add Employee"}
+        readOnly={modal?.mode === "view"}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Employee"
+        message={
+          deleteTarget
+            ? `Are you sure you want to delete ${deleteTarget.firstName} ${deleteTarget.lastName}'s employment record? This cannot be undone.`
+            : ""
+        }
+        onConfirm={handleDelete}
+      />
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faWrench, faTractor, faCalendarDay, faCircleCheck, faScrewdriverWrench } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -9,12 +9,15 @@ import { ListToolbar } from "../../components/common/ListToolbar";
 import { EntityCard } from "../../components/common/EntityCard";
 import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
+import { EntityFormModal, type FieldConfig, type FieldValue } from "../../components/common/EntityFormModal";
+import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
 import { equipmentService } from "../../services/equipmentService";
 import { farmService } from "../../services/farmService";
 import type { Equipment } from "../../types/equipment";
+import type { Farm } from "../../types/farm";
 import type { StatCardData } from "../../types/dashboard";
 
 const STATUS_FILTERS: Array<Equipment["equipmentStatus"] | "ALL"> = [
@@ -26,6 +29,16 @@ const STATUS_FILTERS: Array<Equipment["equipmentStatus"] | "ALL"> = [
   "RETIRED",
 ];
 
+const EQUIPMENT_STATUS_OPTIONS = [
+  { value: "AVAILABLE", label: "Available" },
+  { value: "IN_USE", label: "In Use" },
+  { value: "MAINTENANCE", label: "Maintenance" },
+  { value: "BROKEN", label: "Broken" },
+  { value: "RETIRED", label: "Retired" },
+];
+
+type ModalState = { mode: "create" | "edit" | "view"; record?: Equipment };
+
 export default function EquipmentPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -34,12 +47,16 @@ export default function EquipmentPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Equipment["equipmentStatus"] | "ALL">("ALL");
   const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [farms, setFarms] = useState<Farm[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [modal, setModal] = useState<ModalState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Equipment | null>(null);
 
-  useEffect(() => {
-    Promise.all([equipmentService.findAll(), farmService.findAll()])
-      .then(([equipmentList, farms]) => {
-        const farmNameById = new Map(farms.map((f) => [f.farmId, f.farmName]));
+  const loadEquipment = useCallback(() => {
+    return Promise.all([equipmentService.findAll(), farmService.findAll()])
+      .then(([equipmentList, farmList]) => {
+        setFarms(farmList);
+        const farmNameById = new Map(farmList.map((f) => [f.farmId, f.farmName]));
         setEquipment(
           equipmentList.map((item) => ({
             ...item,
@@ -47,9 +64,53 @@ export default function EquipmentPage() {
           }))
         );
       })
-      .catch(() => setEquipment([]))
-      .finally(() => setIsLoading(false));
+      .catch(() => setEquipment([]));
   }, []);
+
+  useEffect(() => {
+    loadEquipment().finally(() => setIsLoading(false));
+  }, [loadEquipment]);
+
+  const equipmentFields: FieldConfig[] = useMemo(
+    () => [
+      {
+        name: "farmId",
+        label: "Farm",
+        type: "select",
+        required: true,
+        options: farms.map((f) => ({ value: f.farmId, label: f.farmName })),
+      },
+      { name: "equipmentName", label: "Equipment Name", type: "text", required: true, placeholder: "e.g. John Deere 5075E" },
+      { name: "equipmentType", label: "Type", type: "text", required: true, placeholder: "e.g. Tractor" },
+      { name: "purchaseDate", label: "Purchase Date", type: "date", required: true },
+      { name: "purchaseCost", label: "Purchase Cost (₵)", type: "number", required: true, step: "0.01" },
+      { name: "equipmentStatus", label: "Status", type: "select", required: true, options: EQUIPMENT_STATUS_OPTIONS },
+    ],
+    [farms]
+  );
+
+  const handleSubmit = async (values: Record<string, FieldValue>) => {
+    const payload = {
+      farmId: String(values.farmId),
+      equipmentName: String(values.equipmentName),
+      equipmentType: String(values.equipmentType),
+      purchaseDate: String(values.purchaseDate),
+      purchaseCost: Number(values.purchaseCost),
+      equipmentStatus: values.equipmentStatus as Equipment["equipmentStatus"],
+    };
+    if (modal?.mode === "edit" && modal.record) {
+      await equipmentService.update(modal.record.equipmentId, payload);
+    } else {
+      await equipmentService.create(payload);
+    }
+    await loadEquipment();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await equipmentService.remove(deleteTarget.equipmentId);
+    await loadEquipment();
+  };
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
@@ -83,7 +144,7 @@ export default function EquipmentPage() {
         subtitle="Track farm equipment, purchase records, and operational status."
         actionLabel="Add Equipment"
         showAction={canManage}
-        onAction={() => alert("Equipment registration will be available once the backend is connected.")}
+        onAction={() => setModal({ mode: "create" })}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -160,7 +221,13 @@ export default function EquipmentPage() {
                     <StatusBadge status={item.equipmentStatus} variant="equipment" />
                   </td>
                   <td className="px-5 py-3.5">
-                    <RowActions canManage={canManage} entityLabel="equipment item" />
+                    <RowActions
+                      canManage={canManage}
+                      entityLabel="equipment item"
+                      onView={() => setModal({ mode: "view", record: item })}
+                      onEdit={() => setModal({ mode: "edit", record: item })}
+                      onDelete={() => setDeleteTarget(item)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -181,6 +248,9 @@ export default function EquipmentPage() {
             badge={<StatusBadge status={item.equipmentStatus} variant="equipment" />}
             canManage={canManage}
             entityLabel="equipment item"
+            onView={() => setModal({ mode: "view", record: item })}
+            onEdit={() => setModal({ mode: "edit", record: item })}
+            onDelete={() => setDeleteTarget(item)}
             fields={[
               { label: "Purchased", value: formatDate(item.purchaseDate) },
               { label: "Cost", value: `₵ ${item.purchaseCost.toLocaleString()}` },
@@ -189,6 +259,40 @@ export default function EquipmentPage() {
         ))}
         {!isLoading && filteredEquipment.length === 0 && <EmptyState title="No equipment found" />}
       </div>
+
+      <EntityFormModal
+        isOpen={modal !== null}
+        onClose={() => setModal(null)}
+        title={modal?.mode === "edit" ? "Edit Equipment" : modal?.mode === "view" ? "Equipment Details" : "Add Equipment"}
+        fields={equipmentFields}
+        initialValues={
+          modal?.record
+            ? {
+                farmId: modal.record.farmId,
+                equipmentName: modal.record.equipmentName,
+                equipmentType: modal.record.equipmentType,
+                purchaseDate: modal.record.purchaseDate,
+                purchaseCost: modal.record.purchaseCost,
+                equipmentStatus: modal.record.equipmentStatus,
+              }
+            : { farmId: "", equipmentName: "", equipmentType: "", purchaseDate: "", purchaseCost: "", equipmentStatus: "AVAILABLE" }
+        }
+        onSubmit={handleSubmit}
+        submitLabel={modal?.mode === "edit" ? "Save Changes" : "Add Equipment"}
+        readOnly={modal?.mode === "view"}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Equipment"
+        message={
+          deleteTarget
+            ? `Are you sure you want to delete "${deleteTarget.equipmentName}"? This cannot be undone.`
+            : ""
+        }
+        onConfirm={handleDelete}
+      />
     </>
   );
 }

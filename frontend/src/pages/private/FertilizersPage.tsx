@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFlask, faBoxesStacked, faTriangleExclamation, faReceipt } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -8,6 +8,8 @@ import { ListToolbar } from "../../components/common/ListToolbar";
 import { EntityCard } from "../../components/common/EntityCard";
 import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
+import { EntityFormModal, type FieldConfig, type FieldValue } from "../../components/common/EntityFormModal";
+import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
 import { fertilizerService } from "../../services/fertilizerService";
@@ -15,6 +17,15 @@ import type { Fertilizer } from "../../types/fertilizer";
 import type { StatCardData } from "../../types/dashboard";
 
 const TYPE_FILTERS = ["ALL", "Compound", "Nitrogen", "Potassium", "Phosphorus", "Organic"] as const;
+
+const FERTILIZER_FIELDS: FieldConfig[] = [
+  { name: "fertilizerName", label: "Fertilizer Name", type: "text", required: true, placeholder: "e.g. NPK 15-15-15" },
+  { name: "fertilizerType", label: "Type", type: "text", required: true, placeholder: "e.g. Compound" },
+  { name: "unitPrice", label: "Unit Price (₵)", type: "number", required: true, step: "0.01" },
+  { name: "quantity", label: "Quantity (kg)", type: "number", required: true, step: "0.01" },
+];
+
+type ModalState = { mode: "create" | "edit" | "view"; record?: Fertilizer };
 
 export default function FertilizersPage() {
   const { theme } = useTheme();
@@ -25,14 +36,40 @@ export default function FertilizersPage() {
   const [typeFilter, setTypeFilter] = useState<(typeof TYPE_FILTERS)[number]>("ALL");
   const [fertilizers, setFertilizers] = useState<Fertilizer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [modal, setModal] = useState<ModalState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Fertilizer | null>(null);
 
-  useEffect(() => {
-    fertilizerService
+  const loadFertilizers = useCallback(() => {
+    return fertilizerService
       .findAll()
       .then(setFertilizers)
-      .catch(() => setFertilizers([]))
-      .finally(() => setIsLoading(false));
+      .catch(() => setFertilizers([]));
   }, []);
+
+  useEffect(() => {
+    loadFertilizers().finally(() => setIsLoading(false));
+  }, [loadFertilizers]);
+
+  const handleSubmit = async (values: Record<string, FieldValue>) => {
+    const payload = {
+      fertilizerName: String(values.fertilizerName),
+      fertilizerType: String(values.fertilizerType),
+      unitPrice: Number(values.unitPrice),
+      quantity: Number(values.quantity),
+    };
+    if (modal?.mode === "edit" && modal.record) {
+      await fertilizerService.update(modal.record.fertilizerId, payload);
+    } else {
+      await fertilizerService.create(payload);
+    }
+    await loadFertilizers();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await fertilizerService.remove(deleteTarget.fertilizerId);
+    await loadFertilizers();
+  };
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
@@ -66,7 +103,7 @@ export default function FertilizersPage() {
         subtitle="Manage fertilizer stock, pricing, and product types."
         actionLabel="Add Fertilizer"
         showAction={canManage}
-        onAction={() => alert("Fertilizer registration will be available once the backend is connected.")}
+        onAction={() => setModal({ mode: "create" })}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -136,7 +173,13 @@ export default function FertilizersPage() {
                     {item.quantity.toLocaleString()} kg
                   </td>
                   <td className="px-5 py-3.5">
-                    <RowActions canManage={canManage} entityLabel="fertilizer" />
+                    <RowActions
+                      canManage={canManage}
+                      entityLabel="fertilizer"
+                      onView={() => setModal({ mode: "view", record: item })}
+                      onEdit={() => setModal({ mode: "edit", record: item })}
+                      onDelete={() => setDeleteTarget(item)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -160,6 +203,9 @@ export default function FertilizersPage() {
             }
             canManage={canManage}
             entityLabel="fertilizer"
+            onView={() => setModal({ mode: "view", record: item })}
+            onEdit={() => setModal({ mode: "edit", record: item })}
+            onDelete={() => setDeleteTarget(item)}
             fields={[
               { label: "Unit Price", value: `₵ ${item.unitPrice.toLocaleString()}` },
               { label: "Quantity", value: `${item.quantity.toLocaleString()} kg` },
@@ -168,6 +214,38 @@ export default function FertilizersPage() {
         ))}
         {!isLoading && filteredFertilizers.length === 0 && <EmptyState title="No fertilizers found" />}
       </div>
+
+      <EntityFormModal
+        isOpen={modal !== null}
+        onClose={() => setModal(null)}
+        title={modal?.mode === "edit" ? "Edit Fertilizer" : modal?.mode === "view" ? "Fertilizer Details" : "Add Fertilizer"}
+        fields={FERTILIZER_FIELDS}
+        initialValues={
+          modal?.record
+            ? {
+                fertilizerName: modal.record.fertilizerName,
+                fertilizerType: modal.record.fertilizerType,
+                unitPrice: modal.record.unitPrice,
+                quantity: modal.record.quantity,
+              }
+            : { fertilizerName: "", fertilizerType: "", unitPrice: "", quantity: "" }
+        }
+        onSubmit={handleSubmit}
+        submitLabel={modal?.mode === "edit" ? "Save Changes" : "Add Fertilizer"}
+        readOnly={modal?.mode === "view"}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Fertilizer"
+        message={
+          deleteTarget
+            ? `Are you sure you want to delete "${deleteTarget.fertilizerName}"? This cannot be undone.`
+            : ""
+        }
+        onConfirm={handleDelete}
+      />
     </>
   );
 }

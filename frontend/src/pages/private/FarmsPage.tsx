@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLocationDot, faUsers, faSeedling, faTractor, faMapLocationDot } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -9,6 +9,8 @@ import { ListToolbar } from "../../components/common/ListToolbar";
 import { EntityCard } from "../../components/common/EntityCard";
 import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
+import { EntityFormModal, type FieldConfig, type FieldValue } from "../../components/common/EntityFormModal";
+import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
@@ -26,6 +28,26 @@ const STATUS_FILTERS: Array<Farm["farmStatus"] | "ALL"> = [
   "FALLOW",
 ];
 
+const FARM_FIELDS: FieldConfig[] = [
+  { name: "farmName", label: "Farm Name", type: "text", required: true, placeholder: "e.g. Green Valley Estate" },
+  { name: "location", label: "Location", type: "text", required: true, placeholder: "e.g. Kumasi, Ashanti Region" },
+  { name: "size", label: "Size (hectares)", type: "number", required: true, step: "0.01" },
+  {
+    name: "farmStatus",
+    label: "Status",
+    type: "select",
+    required: true,
+    options: [
+      { value: "ACTIVE", label: "Active" },
+      { value: "SEASONAL", label: "Seasonal" },
+      { value: "INACTIVE", label: "Inactive" },
+      { value: "FALLOW", label: "Fallow" },
+    ],
+  },
+];
+
+type ModalState = { mode: "create" | "edit" | "view"; record?: Farm };
+
 export default function FarmsPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -35,9 +57,11 @@ export default function FarmsPage() {
   const [statusFilter, setStatusFilter] = useState<Farm["farmStatus"] | "ALL">("ALL");
   const [farms, setFarms] = useState<Farm[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [modal, setModal] = useState<ModalState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Farm | null>(null);
 
-  useEffect(() => {
-    Promise.all([farmService.findAll(), cropService.findAll(), employeeService.findAll()])
+  const loadFarms = useCallback(() => {
+    return Promise.all([farmService.findAll(), cropService.findAll(), employeeService.findAll()])
       .then(([farmList, crops, employments]) => {
         setFarms(
           farmList.map((farm) => ({
@@ -49,9 +73,33 @@ export default function FarmsPage() {
           }))
         );
       })
-      .catch(() => setFarms([]))
-      .finally(() => setIsLoading(false));
+      .catch(() => setFarms([]));
   }, []);
+
+  useEffect(() => {
+    loadFarms().finally(() => setIsLoading(false));
+  }, [loadFarms]);
+
+  const handleSubmit = async (values: Record<string, FieldValue>) => {
+    const payload = {
+      farmName: String(values.farmName),
+      location: String(values.location),
+      size: Number(values.size),
+      farmStatus: values.farmStatus as Farm["farmStatus"],
+    };
+    if (modal?.mode === "edit" && modal.record) {
+      await farmService.update(modal.record.farmId, payload);
+    } else {
+      await farmService.create(payload);
+    }
+    await loadFarms();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await farmService.remove(deleteTarget.farmId);
+    await loadFarms();
+  };
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
@@ -84,7 +132,7 @@ export default function FarmsPage() {
         subtitle="Manage your registered farms and their operational status."
         actionLabel="Add Farm"
         showAction={canManage}
-        onAction={() => alert("Farm creation will be available once the backend is connected.")}
+        onAction={() => setModal({ mode: "create" })}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -169,7 +217,13 @@ export default function FarmsPage() {
                     {formatDate(farm.updatedAt)}
                   </td>
                   <td className="px-5 py-3.5">
-                    <RowActions canManage={canManage} entityLabel="farm" />
+                    <RowActions
+                      canManage={canManage}
+                      entityLabel="farm"
+                      onView={() => setModal({ mode: "view", record: farm })}
+                      onEdit={() => setModal({ mode: "edit", record: farm })}
+                      onDelete={() => setDeleteTarget(farm)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -190,6 +244,9 @@ export default function FarmsPage() {
             badge={<StatusBadge status={farm.farmStatus} variant="farm" />}
             canManage={canManage}
             entityLabel="farm"
+            onView={() => setModal({ mode: "view", record: farm })}
+            onEdit={() => setModal({ mode: "edit", record: farm })}
+            onDelete={() => setDeleteTarget(farm)}
             fields={[
               { label: "Size", value: `${farm.size} ha` },
               { label: "Employees", value: farm.employeeCount ?? 0 },
@@ -200,6 +257,38 @@ export default function FarmsPage() {
         ))}
         {!isLoading && filteredFarms.length === 0 && <EmptyState title="No farms found" />}
       </div>
+
+      <EntityFormModal
+        isOpen={modal !== null}
+        onClose={() => setModal(null)}
+        title={modal?.mode === "edit" ? "Edit Farm" : modal?.mode === "view" ? "Farm Details" : "Add Farm"}
+        fields={FARM_FIELDS}
+        initialValues={
+          modal?.record
+            ? {
+                farmName: modal.record.farmName,
+                location: modal.record.location,
+                size: modal.record.size,
+                farmStatus: modal.record.farmStatus,
+              }
+            : { farmName: "", location: "", size: "", farmStatus: "ACTIVE" }
+        }
+        onSubmit={handleSubmit}
+        submitLabel={modal?.mode === "edit" ? "Save Changes" : "Create Farm"}
+        readOnly={modal?.mode === "view"}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Farm"
+        message={
+          deleteTarget
+            ? `Are you sure you want to delete "${deleteTarget.farmName}"? This cannot be undone.`
+            : ""
+        }
+        onConfirm={handleDelete}
+      />
     </>
   );
 }

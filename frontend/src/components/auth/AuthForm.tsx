@@ -15,14 +15,7 @@ import { AuthInput } from "../common/AuthInput";
 import { EyeToggle } from "../common/EyeToggle";
 import { PasswordStrengthMeter } from "./PasswordStrengthMeter";
 import type { AuthMode, LoginFormData, RegisterFormData } from "../../types/auth";
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  if (err && typeof err === "object" && "response" in err) {
-    const response = (err as { response?: { data?: { error?: string } } }).response;
-    if (response?.data?.error) return response.data.error;
-  }
-  return fallback;
-}
+import { extractErrorMessage } from "../../utils/errors";
 
 export function AuthForm() {
   const { theme } = useTheme();
@@ -232,7 +225,7 @@ export function AuthForm() {
 
           {loginError && (
             <div
-              className={`p-3 rounded-xl border text-xs font-semibold ${
+              className={`px-3 py-1 rounded-xl text-center border text-xs font-semibold ${
                 isDark
                   ? "bg-red-950/40 border-red-800 text-red-400"
                   : "bg-red-50 border-red-200 text-red-800"
@@ -485,7 +478,7 @@ export function AuthForm() {
 
           {registerError && (
             <div
-              className={`p-3 rounded-xl border text-xs font-semibold ${
+              className={`px-3 py-1 text-center rounded-xl border text-xs font-semibold ${
                 isDark
                   ? "bg-red-950/40 border-red-800 text-red-400"
                   : "bg-red-50 border-red-200 text-red-800"

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSeedling, faTractor, faCalendarDay, faWheatAwn, faBug, faLeaf } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -9,12 +9,15 @@ import { ListToolbar } from "../../components/common/ListToolbar";
 import { EntityCard } from "../../components/common/EntityCard";
 import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
+import { EntityFormModal, type FieldConfig, type FieldValue } from "../../components/common/EntityFormModal";
+import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
 import { cropService } from "../../services/cropService";
 import { farmService } from "../../services/farmService";
 import type { Crop } from "../../types/crop";
+import type { Farm } from "../../types/farm";
 import type { StatCardData } from "../../types/dashboard";
 
 const STATUS_FILTERS: Array<Crop["cropStatus"] | "ALL"> = [
@@ -26,6 +29,16 @@ const STATUS_FILTERS: Array<Crop["cropStatus"] | "ALL"> = [
   "DORMANT",
 ];
 
+const CROP_STATUS_OPTIONS = [
+  { value: "GROWING", label: "Growing" },
+  { value: "READY", label: "Ready" },
+  { value: "HARVESTED", label: "Harvested" },
+  { value: "DISEASED", label: "Diseased" },
+  { value: "DORMANT", label: "Dormant" },
+];
+
+type ModalState = { mode: "create" | "edit" | "view"; record?: Crop };
+
 export default function CropsPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -34,12 +47,16 @@ export default function CropsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Crop["cropStatus"] | "ALL">("ALL");
   const [crops, setCrops] = useState<Crop[]>([]);
+  const [farms, setFarms] = useState<Farm[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [modal, setModal] = useState<ModalState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Crop | null>(null);
 
-  useEffect(() => {
-    Promise.all([cropService.findAll(), farmService.findAll()])
-      .then(([cropList, farms]) => {
-        const farmNameById = new Map(farms.map((f) => [f.farmId, f.farmName]));
+  const loadCrops = useCallback(() => {
+    return Promise.all([cropService.findAll(), farmService.findAll()])
+      .then(([cropList, farmList]) => {
+        setFarms(farmList);
+        const farmNameById = new Map(farmList.map((f) => [f.farmId, f.farmName]));
         setCrops(
           cropList.map((crop) => ({
             ...crop,
@@ -47,9 +64,53 @@ export default function CropsPage() {
           }))
         );
       })
-      .catch(() => setCrops([]))
-      .finally(() => setIsLoading(false));
+      .catch(() => setCrops([]));
   }, []);
+
+  useEffect(() => {
+    loadCrops().finally(() => setIsLoading(false));
+  }, [loadCrops]);
+
+  const cropFields: FieldConfig[] = useMemo(
+    () => [
+      {
+        name: "farmId",
+        label: "Farm",
+        type: "select",
+        required: true,
+        options: farms.map((f) => ({ value: f.farmId, label: f.farmName })),
+      },
+      { name: "cropName", label: "Crop Name", type: "text", required: true, placeholder: "e.g. Tomatoes" },
+      { name: "cropVariety", label: "Variety", type: "text", required: true, placeholder: "e.g. Roma F1" },
+      { name: "plantingDate", label: "Planting Date", type: "date", required: true },
+      { name: "expectedHarvestDate", label: "Expected Harvest Date", type: "date", required: true },
+      { name: "cropStatus", label: "Status", type: "select", required: true, options: CROP_STATUS_OPTIONS },
+    ],
+    [farms]
+  );
+
+  const handleSubmit = async (values: Record<string, FieldValue>) => {
+    const payload = {
+      farmId: String(values.farmId),
+      cropName: String(values.cropName),
+      cropVariety: String(values.cropVariety),
+      plantingDate: String(values.plantingDate),
+      expectedHarvestDate: String(values.expectedHarvestDate),
+      cropStatus: values.cropStatus as Crop["cropStatus"],
+    };
+    if (modal?.mode === "edit" && modal.record) {
+      await cropService.update(modal.record.cropId, payload);
+    } else {
+      await cropService.create(payload);
+    }
+    await loadCrops();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await cropService.remove(deleteTarget.cropId);
+    await loadCrops();
+  };
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
@@ -83,7 +144,7 @@ export default function CropsPage() {
         subtitle="Track planting, growth stages, and harvest schedules across all farms."
         actionLabel="Add Crop"
         showAction={canManage}
-        onAction={() => alert("Crop creation will be available once the backend is connected.")}
+        onAction={() => setModal({ mode: "create" })}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -162,7 +223,13 @@ export default function CropsPage() {
                     <StatusBadge status={crop.cropStatus} variant="crop" />
                   </td>
                   <td className="px-5 py-3.5">
-                    <RowActions canManage={canManage} entityLabel="crop" />
+                    <RowActions
+                      canManage={canManage}
+                      entityLabel="crop"
+                      onView={() => setModal({ mode: "view", record: crop })}
+                      onEdit={() => setModal({ mode: "edit", record: crop })}
+                      onDelete={() => setDeleteTarget(crop)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -183,6 +250,9 @@ export default function CropsPage() {
             badge={<StatusBadge status={crop.cropStatus} variant="crop" />}
             canManage={canManage}
             entityLabel="crop"
+            onView={() => setModal({ mode: "view", record: crop })}
+            onEdit={() => setModal({ mode: "edit", record: crop })}
+            onDelete={() => setDeleteTarget(crop)}
             fields={[
               { label: "Planted", value: formatDate(crop.plantingDate) },
               { label: "Expected Harvest", value: formatDate(crop.expectedHarvestDate) },
@@ -191,6 +261,40 @@ export default function CropsPage() {
         ))}
         {!isLoading && filteredCrops.length === 0 && <EmptyState title="No crops found" />}
       </div>
+
+      <EntityFormModal
+        isOpen={modal !== null}
+        onClose={() => setModal(null)}
+        title={modal?.mode === "edit" ? "Edit Crop" : modal?.mode === "view" ? "Crop Details" : "Add Crop"}
+        fields={cropFields}
+        initialValues={
+          modal?.record
+            ? {
+                farmId: modal.record.farmId,
+                cropName: modal.record.cropName,
+                cropVariety: modal.record.cropVariety,
+                plantingDate: modal.record.plantingDate,
+                expectedHarvestDate: modal.record.expectedHarvestDate,
+                cropStatus: modal.record.cropStatus,
+              }
+            : { farmId: "", cropName: "", cropVariety: "", plantingDate: "", expectedHarvestDate: "", cropStatus: "GROWING" }
+        }
+        onSubmit={handleSubmit}
+        submitLabel={modal?.mode === "edit" ? "Save Changes" : "Create Crop"}
+        readOnly={modal?.mode === "view"}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Crop"
+        message={
+          deleteTarget
+            ? `Are you sure you want to delete "${deleteTarget.cropName}"? This cannot be undone.`
+            : ""
+        }
+        onConfirm={handleDelete}
+      />
     </>
   );
 }

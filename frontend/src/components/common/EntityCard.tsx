@@ -18,6 +18,8 @@ interface EntityCardProps {
   canManage: boolean;
   entityLabel: string;
   onView?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
 /**
@@ -33,6 +35,8 @@ export function EntityCard({
   canManage,
   entityLabel,
   onView,
+  onEdit,
+  onDelete,
 }: EntityCardProps) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -70,7 +74,7 @@ export function EntityCard({
       </div>
 
       <div className={`flex items-center justify-end pt-2 border-t ${divider}`}>
-        <RowActions canManage={canManage} entityLabel={entityLabel} onView={onView} />
+        <RowActions canManage={canManage} entityLabel={entityLabel} onView={onView} onEdit={onEdit} onDelete={onDelete} />
       </div>
     </div>
   );

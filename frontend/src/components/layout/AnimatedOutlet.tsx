@@ -19,6 +19,7 @@ export function AnimatedOutlet() {
     <AnimatePresence mode="wait" initial={false}>
       <motion.div
         key={location.pathname}
+        className="space-y-6"
         variants={pageTransition}
         initial="initial"
         animate="animate"

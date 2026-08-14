@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faClipboardUser, faCalendarDay, faCircleCheck, faClock, faTriangleExclamation, faUserClock } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -9,6 +9,8 @@ import { ListToolbar } from "../../components/common/ListToolbar";
 import { EntityCard } from "../../components/common/EntityCard";
 import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
+import { EntityFormModal, type FieldConfig, type FieldValue } from "../../components/common/EntityFormModal";
+import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
@@ -19,6 +21,14 @@ import type { Attendance } from "../../types/attendance";
 import type { StatCardData } from "../../types/dashboard";
 
 const STATUS_FILTERS: Array<Attendance["attendanceStatus"] | "ALL"> = ["ALL", "PRESENT", "LATE", "ABSENT", "LEAVE"];
+const ATTENDANCE_STATUS_OPTIONS = [
+  { value: "PRESENT", label: "Present" },
+  { value: "LATE", label: "Late" },
+  { value: "ABSENT", label: "Absent" },
+  { value: "LEAVE", label: "Leave" },
+];
+
+type ModalState = { mode: "create" | "edit" | "view"; record?: Attendance };
 
 export default function AttendancePage() {
   const { theme } = useTheme();
@@ -28,13 +38,23 @@ export default function AttendancePage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Attendance["attendanceStatus"] | "ALL">("ALL");
   const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const [employeeOptions, setEmployeeOptions] = useState<{ value: string; label: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [modal, setModal] = useState<ModalState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Attendance | null>(null);
 
-  useEffect(() => {
-    Promise.all([attendanceService.findAll(), employeeService.findAll(), appUserService.findAll()])
+  const loadAttendance = useCallback(() => {
+    return Promise.all([attendanceService.findAll(), employeeService.findAll(), appUserService.findAll()])
       .then(([records, employments, users]) => {
         const userIdByEmploymentId = new Map(employments.map((e) => [e.employmentId, e.userId]));
         const userById = new Map(users.map((u) => [u.userId, u]));
+        const nameByEmploymentId = new Map(
+          employments.map((e) => {
+            const user = userById.get(e.userId);
+            return [e.employmentId, user ? `${user.firstName} ${user.lastName} (${e.role})` : `Unknown (${e.role})`];
+          })
+        );
+        setEmployeeOptions(employments.map((e) => ({ value: e.employmentId, label: nameByEmploymentId.get(e.employmentId) ?? e.employmentId })));
         setAttendance(
           records.map((record) => {
             const userId = userIdByEmploymentId.get(record.employmentId);
@@ -46,9 +66,45 @@ export default function AttendancePage() {
           })
         );
       })
-      .catch(() => setAttendance([]))
-      .finally(() => setIsLoading(false));
+      .catch(() => setAttendance([]));
   }, []);
+
+  useEffect(() => {
+    loadAttendance().finally(() => setIsLoading(false));
+  }, [loadAttendance]);
+
+  const attendanceFields: FieldConfig[] = useMemo(
+    () => [
+      { name: "employmentId", label: "Employee", type: "select", required: true, options: employeeOptions },
+      { name: "attendanceDate", label: "Date", type: "date", required: true },
+      { name: "checkIn", label: "Check In", type: "time" },
+      { name: "checkOut", label: "Check Out", type: "time" },
+      { name: "attendanceStatus", label: "Status", type: "select", required: true, options: ATTENDANCE_STATUS_OPTIONS },
+    ],
+    [employeeOptions]
+  );
+
+  const handleSubmit = async (values: Record<string, FieldValue>) => {
+    const payload = {
+      employmentId: String(values.employmentId),
+      attendanceDate: String(values.attendanceDate),
+      checkIn: values.checkIn ? String(values.checkIn) : null,
+      checkOut: values.checkOut ? String(values.checkOut) : null,
+      attendanceStatus: values.attendanceStatus as Attendance["attendanceStatus"],
+    };
+    if (modal?.mode === "edit" && modal.record) {
+      await attendanceService.update(modal.record.attendanceId, payload);
+    } else {
+      await attendanceService.create(payload);
+    }
+    await loadAttendance();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await attendanceService.remove(deleteTarget.attendanceId);
+    await loadAttendance();
+  };
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
@@ -78,7 +134,7 @@ export default function AttendancePage() {
         subtitle="Review daily check-ins, check-outs, and attendance status."
         actionLabel="Log Attendance"
         showAction={canManage}
-        onAction={() => alert("Logging attendance will be available once the backend is connected.")}
+        onAction={() => setModal({ mode: "create" })}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -147,7 +203,13 @@ export default function AttendancePage() {
                     <StatusBadge status={record.attendanceStatus} variant="attendance" />
                   </td>
                   <td className="px-5 py-3.5">
-                    <RowActions canManage={canManage} entityLabel="attendance record" />
+                    <RowActions
+                      canManage={canManage}
+                      entityLabel="attendance record"
+                      onView={() => setModal({ mode: "view", record })}
+                      onEdit={() => setModal({ mode: "edit", record })}
+                      onDelete={() => setDeleteTarget(record)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -168,6 +230,9 @@ export default function AttendancePage() {
             badge={<StatusBadge status={record.attendanceStatus} variant="attendance" />}
             canManage={canManage}
             entityLabel="attendance record"
+            onView={() => setModal({ mode: "view", record })}
+            onEdit={() => setModal({ mode: "edit", record })}
+            onDelete={() => setDeleteTarget(record)}
             fields={[
               { label: "Check In", value: record.checkIn ?? "—" },
               { label: "Check Out", value: record.checkOut ?? "—" },
@@ -176,6 +241,39 @@ export default function AttendancePage() {
         ))}
         {!isLoading && filteredAttendance.length === 0 && <EmptyState title="No attendance records found" />}
       </div>
+
+      <EntityFormModal
+        isOpen={modal !== null}
+        onClose={() => setModal(null)}
+        title={modal?.mode === "edit" ? "Edit Attendance Record" : modal?.mode === "view" ? "Attendance Details" : "Log Attendance"}
+        fields={attendanceFields}
+        initialValues={
+          modal?.record
+            ? {
+                employmentId: modal.record.employmentId,
+                attendanceDate: modal.record.attendanceDate,
+                checkIn: modal.record.checkIn ?? "",
+                checkOut: modal.record.checkOut ?? "",
+                attendanceStatus: modal.record.attendanceStatus,
+              }
+            : { employmentId: "", attendanceDate: "", checkIn: "", checkOut: "", attendanceStatus: "PRESENT" }
+        }
+        onSubmit={handleSubmit}
+        submitLabel={modal?.mode === "edit" ? "Save Changes" : "Log Attendance"}
+        readOnly={modal?.mode === "view"}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Attendance Record"
+        message={
+          deleteTarget
+            ? `Are you sure you want to delete ${deleteTarget.employeeName}'s attendance record for ${formatDate(deleteTarget.attendanceDate)}? This cannot be undone.`
+            : ""
+        }
+        onConfirm={handleDelete}
+      />
     </>
   );
 }

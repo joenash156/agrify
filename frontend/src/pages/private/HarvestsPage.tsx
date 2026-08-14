@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faWheatAwn, faTractor, faCalendarDay, faSeedling, faStar, faBoxesStacked } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -9,6 +9,8 @@ import { ListToolbar } from "../../components/common/ListToolbar";
 import { EntityCard } from "../../components/common/EntityCard";
 import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
+import { EntityFormModal, type FieldConfig, type FieldValue } from "../../components/common/EntityFormModal";
+import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
@@ -16,10 +18,18 @@ import { harvestService } from "../../services/harvestService";
 import { cropService } from "../../services/cropService";
 import { farmService } from "../../services/farmService";
 import { inventoryService } from "../../services/inventoryService";
+import type { Crop } from "../../types/crop";
 import type { Harvest } from "../../types/harvest";
 import type { StatCardData } from "../../types/dashboard";
 
 const GRADE_FILTERS: Array<Harvest["qualityGrade"] | "ALL"> = ["ALL", "PREMIUM", "STANDARD", "SUBSTANDARD"];
+const GRADE_OPTIONS = [
+  { value: "PREMIUM", label: "Premium" },
+  { value: "STANDARD", label: "Standard" },
+  { value: "SUBSTANDARD", label: "Substandard" },
+];
+
+type ModalState = { mode: "create" | "edit" | "view"; record?: Harvest };
 
 export default function HarvestsPage() {
   const { theme } = useTheme();
@@ -29,13 +39,17 @@ export default function HarvestsPage() {
   const [search, setSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState<Harvest["qualityGrade"] | "ALL">("ALL");
   const [harvests, setHarvests] = useState<Harvest[]>([]);
+  const [crops, setCrops] = useState<Crop[]>([]);
   const [pendingStorageCount, setPendingStorageCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [modal, setModal] = useState<ModalState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Harvest | null>(null);
 
-  useEffect(() => {
-    Promise.all([harvestService.findAll(), cropService.findAll(), farmService.findAll(), inventoryService.findAll()])
-      .then(([harvestList, crops, farms, inventory]) => {
-        const cropById = new Map(crops.map((c) => [c.cropId, c]));
+  const loadHarvests = useCallback(() => {
+    return Promise.all([harvestService.findAll(), cropService.findAll(), farmService.findAll(), inventoryService.findAll()])
+      .then(([harvestList, cropList, farms, inventory]) => {
+        setCrops(cropList);
+        const cropById = new Map(cropList.map((c) => [c.cropId, c]));
         const farmNameById = new Map(farms.map((f) => [f.farmId, f.farmName]));
         setHarvests(
           harvestList.map((harvest) => {
@@ -50,9 +64,51 @@ export default function HarvestsPage() {
         const storedHarvestIds = new Set(inventory.map((i) => i.harvestId));
         setPendingStorageCount(harvestList.filter((h) => !storedHarvestIds.has(h.harvestId)).length);
       })
-      .catch(() => setHarvests([]))
-      .finally(() => setIsLoading(false));
+      .catch(() => setHarvests([]));
   }, []);
+
+  useEffect(() => {
+    loadHarvests().finally(() => setIsLoading(false));
+  }, [loadHarvests]);
+
+  const harvestFields: FieldConfig[] = useMemo(
+    () => [
+      {
+        name: "cropId",
+        label: "Crop",
+        type: "select",
+        required: true,
+        options: crops.map((c) => ({ value: c.cropId, label: `${c.cropName} (${c.cropVariety})` })),
+      },
+      { name: "harvestDate", label: "Harvest Date", type: "date", required: true },
+      { name: "quantity", label: "Quantity", type: "number", required: true, step: "0.01" },
+      { name: "unit", label: "Unit", type: "text", required: true, placeholder: "e.g. kg" },
+      { name: "qualityGrade", label: "Quality Grade", type: "select", required: true, options: GRADE_OPTIONS },
+    ],
+    [crops]
+  );
+
+  const handleSubmit = async (values: Record<string, FieldValue>) => {
+    const payload = {
+      cropId: String(values.cropId),
+      harvestDate: String(values.harvestDate),
+      quantity: Number(values.quantity),
+      unit: String(values.unit),
+      qualityGrade: values.qualityGrade as Harvest["qualityGrade"],
+    };
+    if (modal?.mode === "edit" && modal.record) {
+      await harvestService.update(modal.record.harvestId, payload);
+    } else {
+      await harvestService.create(payload);
+    }
+    await loadHarvests();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await harvestService.remove(deleteTarget.harvestId);
+    await loadHarvests();
+  };
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
@@ -90,7 +146,7 @@ export default function HarvestsPage() {
         subtitle="Log and review harvest yields and quality across all crops."
         actionLabel="Log Harvest"
         showAction={canManage}
-        onAction={() => alert("Logging a harvest will be available once the backend is connected.")}
+        onAction={() => setModal({ mode: "create" })}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -166,7 +222,13 @@ export default function HarvestsPage() {
                     <StatusBadge status={harvest.qualityGrade} variant="grade" />
                   </td>
                   <td className="px-5 py-3.5">
-                    <RowActions canManage={canManage} entityLabel="harvest record" />
+                    <RowActions
+                      canManage={canManage}
+                      entityLabel="harvest record"
+                      onView={() => setModal({ mode: "view", record: harvest })}
+                      onEdit={() => setModal({ mode: "edit", record: harvest })}
+                      onDelete={() => setDeleteTarget(harvest)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -187,6 +249,9 @@ export default function HarvestsPage() {
             badge={<StatusBadge status={harvest.qualityGrade} variant="grade" />}
             canManage={canManage}
             entityLabel="harvest record"
+            onView={() => setModal({ mode: "view", record: harvest })}
+            onEdit={() => setModal({ mode: "edit", record: harvest })}
+            onDelete={() => setDeleteTarget(harvest)}
             fields={[
               { label: "Harvested", value: formatDate(harvest.harvestDate) },
               { label: "Quantity", value: `${harvest.quantity} ${harvest.unit}` },
@@ -195,6 +260,39 @@ export default function HarvestsPage() {
         ))}
         {!isLoading && filteredHarvests.length === 0 && <EmptyState title="No harvest records found" />}
       </div>
+
+      <EntityFormModal
+        isOpen={modal !== null}
+        onClose={() => setModal(null)}
+        title={modal?.mode === "edit" ? "Edit Harvest Record" : modal?.mode === "view" ? "Harvest Record Details" : "Log Harvest"}
+        fields={harvestFields}
+        initialValues={
+          modal?.record
+            ? {
+                cropId: modal.record.cropId,
+                harvestDate: modal.record.harvestDate,
+                quantity: modal.record.quantity,
+                unit: modal.record.unit,
+                qualityGrade: modal.record.qualityGrade,
+              }
+            : { cropId: "", harvestDate: "", quantity: "", unit: "kg", qualityGrade: "STANDARD" }
+        }
+        onSubmit={handleSubmit}
+        submitLabel={modal?.mode === "edit" ? "Save Changes" : "Log Harvest"}
+        readOnly={modal?.mode === "view"}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Harvest Record"
+        message={
+          deleteTarget
+            ? `Are you sure you want to delete the ${deleteTarget.cropName} harvest from ${formatDate(deleteTarget.harvestDate)}? This cannot be undone.`
+            : ""
+        }
+        onConfirm={handleDelete}
+      />
     </>
   );
 }

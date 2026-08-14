@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCreditCard, faCalendarDay, faReceipt, faTriangleExclamation, faRotateLeft } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -9,15 +9,33 @@ import { ListToolbar } from "../../components/common/ListToolbar";
 import { EntityCard } from "../../components/common/EntityCard";
 import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
+import { EntityFormModal, type FieldConfig, type FieldValue } from "../../components/common/EntityFormModal";
+import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 import { formatDate } from "../../utils/formatDate";
 import { canManageRecords } from "../../utils/permissions";
 import { useCurrentUser } from "../../contexts/AuthContext";
+import { toPublicId } from "../../utils/publicId";
 import { paymentService } from "../../services/paymentService";
 import { saleService } from "../../services/saleService";
+import type { Sale } from "../../types/sale";
 import type { Payment } from "../../types/payment";
 import type { StatCardData } from "../../types/dashboard";
 
 const STATUS_FILTERS: Array<Payment["paymentStatus"] | "ALL"> = ["ALL", "CONFIRMED", "PENDING", "FAILED", "REFUNDED"];
+const PAYMENT_STATUS_OPTIONS = [
+  { value: "CONFIRMED", label: "Confirmed" },
+  { value: "PENDING", label: "Pending" },
+  { value: "FAILED", label: "Failed" },
+  { value: "REFUNDED", label: "Refunded" },
+];
+const PAYMENT_METHOD_OPTIONS = [
+  { value: "Cash", label: "Cash" },
+  { value: "Mobile Money", label: "Mobile Money" },
+  { value: "Bank Transfer", label: "Bank Transfer" },
+  { value: "Card", label: "Card" },
+];
+
+type ModalState = { mode: "create" | "edit" | "view"; record?: Payment };
 
 export default function PaymentsPage() {
   const { theme } = useTheme();
@@ -27,12 +45,16 @@ export default function PaymentsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Payment["paymentStatus"] | "ALL">("ALL");
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [modal, setModal] = useState<ModalState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Payment | null>(null);
 
-  useEffect(() => {
-    Promise.all([paymentService.findAll(), saleService.findAll()])
-      .then(([paymentList, sales]) => {
-        const customerNameBySaleId = new Map(sales.map((s) => [s.saleId, s.customerName]));
+  const loadPayments = useCallback(() => {
+    return Promise.all([paymentService.findAll(), saleService.findAll()])
+      .then(([paymentList, saleList]) => {
+        setSales(saleList);
+        const customerNameBySaleId = new Map(saleList.map((s) => [s.saleId, s.customerName]));
         setPayments(
           paymentList.map((payment) => ({
             ...payment,
@@ -40,9 +62,49 @@ export default function PaymentsPage() {
           }))
         );
       })
-      .catch(() => setPayments([]))
-      .finally(() => setIsLoading(false));
+      .catch(() => setPayments([]));
   }, []);
+
+  useEffect(() => {
+    loadPayments().finally(() => setIsLoading(false));
+  }, [loadPayments]);
+
+  const paymentFields: FieldConfig[] = useMemo(
+    () => [
+      {
+        name: "saleId",
+        label: "Sale",
+        type: "select",
+        required: true,
+        options: sales.map((s) => ({ value: s.saleId, label: `${toPublicId("SL", s.saleId)} · ${s.customerName} · ₵ ${s.total.toLocaleString()}` })),
+      },
+      { name: "amount", label: "Amount (₵)", type: "number", required: true, step: "0.01" },
+      { name: "paymentMethod", label: "Method", type: "select", required: true, options: PAYMENT_METHOD_OPTIONS },
+      { name: "paymentStatus", label: "Status", type: "select", required: true, options: PAYMENT_STATUS_OPTIONS },
+    ],
+    [sales]
+  );
+
+  const handleSubmit = async (values: Record<string, FieldValue>) => {
+    const payload = {
+      saleId: String(values.saleId),
+      amount: Number(values.amount),
+      paymentMethod: String(values.paymentMethod),
+      paymentStatus: values.paymentStatus as Payment["paymentStatus"],
+    };
+    if (modal?.mode === "edit" && modal.record) {
+      await paymentService.update(modal.record.paymentId, payload);
+    } else {
+      await paymentService.create(payload);
+    }
+    await loadPayments();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await paymentService.remove(deleteTarget.paymentId);
+    await loadPayments();
+  };
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
@@ -82,7 +144,7 @@ export default function PaymentsPage() {
         subtitle="Track payment collections, methods, and settlement status."
         actionLabel="Record Payment"
         showAction={canManage}
-        onAction={() => alert("Recording a payment will be available once the backend is connected.")}
+        onAction={() => setModal({ mode: "create" })}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -137,8 +199,8 @@ export default function PaymentsPage() {
                         <FontAwesomeIcon icon={faCreditCard} className="w-4 h-4" />
                       </div>
                       <div>
-                        <p className={`text-xs font-bold ${sectionTitle}`}>{payment.paymentId}</p>
-                        <p className={`text-[11px] ${subText}`}>{payment.saleId}</p>
+                        <p className={`text-xs font-bold ${sectionTitle}`}>{toPublicId("PL", payment.paymentId)}</p>
+                        <p className={`text-[11px] ${subText}`}>{toPublicId("SL", payment.saleId)}</p>
                       </div>
                     </div>
                   </td>
@@ -155,7 +217,13 @@ export default function PaymentsPage() {
                     <StatusBadge status={payment.paymentStatus} variant="payment" />
                   </td>
                   <td className="px-5 py-3.5">
-                    <RowActions canManage={canManage} entityLabel="payment" />
+                    <RowActions
+                      canManage={canManage}
+                      entityLabel="payment"
+                      onView={() => setModal({ mode: "view", record: payment })}
+                      onEdit={() => setModal({ mode: "edit", record: payment })}
+                      onDelete={() => setDeleteTarget(payment)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -172,10 +240,13 @@ export default function PaymentsPage() {
             key={payment.paymentId}
             icon={faCreditCard}
             title={payment.customerName}
-            subtitle={`${payment.paymentId} · ${payment.saleId}`}
+            subtitle={`${toPublicId("PL", payment.paymentId)} · ${toPublicId("SL", payment.saleId)}`}
             badge={<StatusBadge status={payment.paymentStatus} variant="payment" />}
             canManage={canManage}
             entityLabel="payment"
+            onView={() => setModal({ mode: "view", record: payment })}
+            onEdit={() => setModal({ mode: "edit", record: payment })}
+            onDelete={() => setDeleteTarget(payment)}
             fields={[
               { label: "Date", value: formatDate(payment.paymentDate) },
               { label: "Amount", value: `₵ ${payment.amount.toLocaleString()}` },
@@ -185,6 +256,38 @@ export default function PaymentsPage() {
         ))}
         {!isLoading && filteredPayments.length === 0 && <EmptyState title="No payments found" />}
       </div>
+
+      <EntityFormModal
+        isOpen={modal !== null}
+        onClose={() => setModal(null)}
+        title={modal?.mode === "edit" ? "Edit Payment" : modal?.mode === "view" ? "Payment Details" : "Record Payment"}
+        fields={paymentFields}
+        initialValues={
+          modal?.record
+            ? {
+                saleId: modal.record.saleId,
+                amount: modal.record.amount,
+                paymentMethod: modal.record.paymentMethod,
+                paymentStatus: modal.record.paymentStatus,
+              }
+            : { saleId: "", amount: "", paymentMethod: "Cash", paymentStatus: "PENDING" }
+        }
+        onSubmit={handleSubmit}
+        submitLabel={modal?.mode === "edit" ? "Save Changes" : "Record Payment"}
+        readOnly={modal?.mode === "view"}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Payment"
+        message={
+          deleteTarget
+            ? `Are you sure you want to delete payment ${toPublicId("PL", deleteTarget.paymentId)}? This cannot be undone.`
+            : ""
+        }
+        onConfirm={handleDelete}
+      />
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faReceipt, faCalendarDay, faUser, faCartShopping, faClock, faTriangleExclamation } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -10,13 +10,27 @@ import { ListToolbar } from "../../components/common/ListToolbar";
 import { EntityCard } from "../../components/common/EntityCard";
 import { RowActions } from "../../components/common/RowActions";
 import { EmptyState } from "../../components/common/EmptyState";
+import { EntityFormModal, type FieldConfig, type FieldValue } from "../../components/common/EntityFormModal";
+import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 import { formatDate } from "../../utils/formatDate";
+import { toPublicId } from "../../utils/publicId";
 import { canManageOwnedRecord, canCreateSales } from "../../utils/permissions";
 import { saleService } from "../../services/saleService";
+import { customerService, type Customer } from "../../services/customerService";
+import { employeeService } from "../../services/employeeService";
+import { appUserService } from "../../services/appUserService";
 import type { Sale } from "../../types/sale";
 import type { StatCardData } from "../../types/dashboard";
 
 const STATUS_FILTERS: Array<Sale["saleStatus"] | "ALL"> = ["ALL", "PAID", "PARTIALLY_PAID", "UNPAID", "CANCELLED"];
+const SALE_STATUS_OPTIONS = [
+  { value: "PAID", label: "Paid" },
+  { value: "PARTIALLY_PAID", label: "Partially Paid" },
+  { value: "UNPAID", label: "Unpaid" },
+  { value: "CANCELLED", label: "Cancelled" },
+];
+
+type ModalState = { mode: "create" | "edit" | "view"; record?: Sale };
 
 export default function SalesPage() {
   const { theme } = useTheme();
@@ -27,15 +41,68 @@ export default function SalesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Sale["saleStatus"] | "ALL">("ALL");
   const [sales, setSales] = useState<Sale[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [employeeOptions, setEmployeeOptions] = useState<{ value: string; label: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [modal, setModal] = useState<ModalState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Sale | null>(null);
+
+  const loadSales = useCallback(() => {
+    return Promise.all([saleService.findAll(), customerService.findAll(), employeeService.findAll(), appUserService.findAll()])
+      .then(([saleList, customerList, employments, users]) => {
+        setSales(saleList);
+        setCustomers(customerList);
+        const userById = new Map(users.map((u) => [u.userId, u]));
+        setEmployeeOptions(
+          employments.map((e) => {
+            const user = userById.get(e.userId);
+            return { value: e.employmentId, label: user ? `${user.firstName} ${user.lastName} (${e.role})` : e.role };
+          })
+        );
+      })
+      .catch(() => setSales([]));
+  }, []);
 
   useEffect(() => {
-    saleService
-      .findAll()
-      .then(setSales)
-      .catch(() => setSales([]))
-      .finally(() => setIsLoading(false));
-  }, []);
+    loadSales().finally(() => setIsLoading(false));
+  }, [loadSales]);
+
+  const saleFields: FieldConfig[] = useMemo(
+    () => [
+      {
+        name: "customerId",
+        label: "Customer",
+        type: "select",
+        required: true,
+        options: customers.map((c) => ({ value: c.customerId, label: `${c.firstName} ${c.lastName}` })),
+      },
+      { name: "employmentId", label: "Sold By", type: "select", required: true, options: employeeOptions },
+      { name: "total", label: "Total (₵)", type: "number", required: true, step: "0.01" },
+      { name: "saleStatus", label: "Status", type: "select", required: true, options: SALE_STATUS_OPTIONS },
+    ],
+    [customers, employeeOptions]
+  );
+
+  const handleSubmit = async (values: Record<string, FieldValue>) => {
+    const payload = {
+      customerId: String(values.customerId),
+      employmentId: String(values.employmentId),
+      total: Number(values.total),
+      saleStatus: values.saleStatus as Sale["saleStatus"],
+    };
+    if (modal?.mode === "edit" && modal.record) {
+      await saleService.update(modal.record.saleId, payload);
+    } else {
+      await saleService.create(payload);
+    }
+    await loadSales();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await saleService.remove(deleteTarget.saleId);
+    await loadSales();
+  };
 
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200";
   const sectionTitle = isDark ? "text-zinc-100" : "text-zinc-900";
@@ -76,7 +143,7 @@ export default function SalesPage() {
         subtitle="Review customer orders, order value, and fulfillment status."
         actionLabel="New Sale"
         showAction={canCreate}
-        onAction={() => alert("Creating a sale will be available once the backend is connected.")}
+        onAction={() => setModal({ mode: "create" })}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -131,7 +198,7 @@ export default function SalesPage() {
                         <FontAwesomeIcon icon={faReceipt} className="w-4 h-4" />
                       </div>
                       <div>
-                        <p className={`text-xs font-bold ${sectionTitle}`}>{sale.saleId}</p>
+                        <p className={`text-xs font-bold ${sectionTitle}`}>{toPublicId("SL", sale.saleId)}</p>
                         <p className={`text-[11px] ${subText}`}>{sale.itemCount} item{sale.itemCount > 1 ? "s" : ""}</p>
                       </div>
                     </div>
@@ -162,6 +229,9 @@ export default function SalesPage() {
                     <RowActions
                       canManage={canManageOwnedRecord(currentUser.role, sale.soldBy === currentUserName)}
                       entityLabel="sale"
+                      onView={() => setModal({ mode: "view", record: sale })}
+                      onEdit={() => setModal({ mode: "edit", record: sale })}
+                      onDelete={() => setDeleteTarget(sale)}
                     />
                   </td>
                 </tr>
@@ -179,10 +249,13 @@ export default function SalesPage() {
             key={sale.saleId}
             icon={faReceipt}
             title={sale.customerName}
-            subtitle={`${sale.saleId} · ${sale.itemCount} item${sale.itemCount > 1 ? "s" : ""}`}
+            subtitle={`${toPublicId("SL", sale.saleId)} · ${sale.itemCount} item${sale.itemCount > 1 ? "s" : ""}`}
             badge={<StatusBadge status={sale.saleStatus} variant="sale" />}
             canManage={canManageOwnedRecord(currentUser.role, sale.soldBy === currentUserName)}
             entityLabel="sale"
+            onView={() => setModal({ mode: "view", record: sale })}
+            onEdit={() => setModal({ mode: "edit", record: sale })}
+            onDelete={() => setDeleteTarget(sale)}
             fields={[
               { label: "Date", value: formatDate(sale.saleDate) },
               { label: "Total", value: `₵ ${sale.total.toLocaleString()}` },
@@ -192,6 +265,38 @@ export default function SalesPage() {
         ))}
         {!isLoading && filteredSales.length === 0 && <EmptyState title="No sales found" />}
       </div>
+
+      <EntityFormModal
+        isOpen={modal !== null}
+        onClose={() => setModal(null)}
+        title={modal?.mode === "edit" ? "Edit Sale" : modal?.mode === "view" ? "Sale Details" : "New Sale"}
+        fields={saleFields}
+        initialValues={
+          modal?.record
+            ? {
+                customerId: modal.record.customerId,
+                employmentId: modal.record.employmentId,
+                total: modal.record.total,
+                saleStatus: modal.record.saleStatus,
+              }
+            : { customerId: "", employmentId: "", total: "", saleStatus: "UNPAID" }
+        }
+        onSubmit={handleSubmit}
+        submitLabel={modal?.mode === "edit" ? "Save Changes" : "Create Sale"}
+        readOnly={modal?.mode === "view"}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Sale"
+        message={
+          deleteTarget
+            ? `Are you sure you want to delete sale ${toPublicId("SL", deleteTarget.saleId)}? This cannot be undone.`
+            : ""
+        }
+        onConfirm={handleDelete}
+      />
     </>
   );
 }
