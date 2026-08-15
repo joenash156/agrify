@@ -23,7 +23,7 @@ public class AdminInitializer implements CommandLineRunner {
         }
 
         // The demo accounts (DemoAccountInitializer) get seeded notifications straight from
-        // farm_management.sql, but admin's userId is only known at runtime — so it needs its
+        // database/db/insert_data.sql, but admin's userId is only known at runtime — so it needs its
         // own welcome notifications here. Checked independently of account creation (not just
         // "if just created") so an admin account from an older run without any notifications
         // still gets seeded on the next restart instead of staying empty forever.

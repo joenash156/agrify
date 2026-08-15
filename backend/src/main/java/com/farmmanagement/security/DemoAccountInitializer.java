@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Seeds one login per non-admin role, linked to seed app_user rows from
- * database/farm_management.sql, so every role in the frontend is actually
+ * database/db/insert_data.sql, so every role in the frontend is actually
  * testable via a real login instead of just AdminInitializer's admin account.
  */
 @Component
