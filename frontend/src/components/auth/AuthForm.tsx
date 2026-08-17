@@ -16,6 +16,7 @@ import { EyeToggle } from "../common/EyeToggle";
 import { PasswordStrengthMeter } from "./PasswordStrengthMeter";
 import type { AuthMode, LoginFormData, RegisterFormData } from "../../types/auth";
 import { extractErrorMessage } from "../../utils/errors";
+import { consumePrefillUsername } from "../../services/authService";
 
 export function AuthForm() {
   const { theme } = useTheme();
@@ -25,12 +26,14 @@ export function AuthForm() {
 
   const [mode, setMode] = useState<AuthMode>("login");
 
-  // Login form state
-  const [loginData, setLoginData] = useState<LoginFormData>({
-    username: "",
+  // Login form state — the username is seeded from a one-time value left behind by a
+  // forced logout (e.g. right after changing password), so the user doesn't have to
+  // retype it. A lazy initializer keeps this a single synchronous read on first render.
+  const [loginData, setLoginData] = useState<LoginFormData>(() => ({
+    username: consumePrefillUsername() ?? "",
     password: "",
     rememberMe: false,
-  });
+  }));
   const [showLoginPw, setShowLoginPw] = useState(false);
   const [loginSubmitting, setLoginSubmitting] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);

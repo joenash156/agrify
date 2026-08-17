@@ -59,6 +59,13 @@ function cartStorageKey(userId: string): string {
   return `agrify:pos-cart:${userId}`;
 }
 
+// employment.role is a free-text job title ("Sales Associate", "Field Worker", ...) rather
+// than the strict account-role enum, so "Sold By" matches on it loosely — this still excludes
+// non-sales staff (workers, managers, equipment operators) from the picker, which is the goal.
+function isSalesRole(role: string): boolean {
+  return role.toUpperCase().includes("SALES");
+}
+
 export default function POSPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -93,13 +100,16 @@ export default function POSPage() {
         setCustomers(customerList);
 
         const userById = new Map(users.map((u) => [u.userId, u]));
+        const salesEmployments = employments.filter((e) => isSalesRole(e.role));
         setEmployeeOptions(
-          employments.map((e) => {
+          salesEmployments.map((e) => {
             const user = userById.get(e.userId);
             return { value: e.employmentId, label: user ? `${user.firstName} ${user.lastName} (${e.role})` : e.role };
           })
         );
-        const mine = employments.find((e) => e.userId === currentUser.userId && e.employmentStatus === "ACTIVE");
+        // Only pre-select "my own employment" if I'm actually a sales person — a farm
+        // manager or admin covering the till still has to explicitly pick who it's for.
+        const mine = salesEmployments.find((e) => e.userId === currentUser.userId && e.employmentStatus === "ACTIVE");
         if (mine) setSoldByEmploymentId(mine.employmentId);
 
         // Restore any in-progress cart for this user, re-validated against current stock —
@@ -233,7 +243,7 @@ export default function POSPage() {
       setCustomerId("");
       setSaleStatus("UNPAID");
       localStorage.removeItem(cartStorageKey(currentUser.userId));
-      toast.success("Sale recorded — inventory has been updated.");
+      toast.success("Sale recorded. Inventory has been updated.");
       await loadData();
     } catch (err) {
       toast.error(extractErrorMessage(err, "Something went wrong while completing the sale. Please try again."));

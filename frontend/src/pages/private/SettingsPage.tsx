@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faUser,
@@ -11,14 +11,17 @@ import {
   faCircleCheck,
 } from "@fortawesome/free-solid-svg-icons";
 import { useTheme } from "../../contexts/ThemeContext";
-import { useCurrentUser } from "../../contexts/AuthContext";
+import { useCurrentUser, useAuth } from "../../contexts/AuthContext";
+import { useToast } from "../../contexts/ToastContext";
 import { PageHeader } from "../../components/common/PageHeader";
 import { AuthInput } from "../../components/common/AuthInput";
 import { EyeToggle } from "../../components/common/EyeToggle";
 import { Switch } from "../../components/common/Switch";
 import { StatusBadge } from "../../components/common/StatusBadge";
 import { ThemeSwitcher } from "../../components/common/ThemeSwitcher";
-import { changePassword } from "../../services/authService";
+import { changePassword, setPrefillUsername } from "../../services/authService";
+import { appUserService } from "../../services/appUserService";
+import { extractErrorMessage } from "../../utils/errors";
 import { getNavGroups } from "../../data/dashboardNav";
 
 const TABS = [
@@ -34,6 +37,8 @@ export default function SettingsPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const currentUser = useCurrentUser();
+  const { logout, updateUserProfile } = useAuth();
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<TabId>("profile");
 
   const [profile, setProfile] = useState({
@@ -41,14 +46,61 @@ export default function SettingsPage() {
     lastName: currentUser.lastName,
     email: currentUser.email,
     phone: "",
+    otherPhone: "",
   });
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileSubmitting, setProfileSubmitting] = useState(false);
+
+  // The auth session only carries a minimal user shape (no phone number) — load the
+  // full profile record separately so the form reflects what's actually saved.
+  useEffect(() => {
+    appUserService
+      .findById(currentUser.userId)
+      .then((user) => {
+        setProfile({
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phone: user.phoneNumber ?? "",
+          otherPhone: user.otherPhoneNumber ?? "",
+        });
+      })
+      .catch(() => toast.error("Failed to load your profile details."))
+      .finally(() => setProfileLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser.userId]);
+
+  const handleSaveProfile = async () => {
+    if (profileSubmitting) return;
+    const firstName = profile.firstName.trim();
+    const lastName = profile.lastName.trim();
+    if (!firstName || !lastName) {
+      toast.error("First and last name can't be empty.");
+      return;
+    }
+    setProfileSubmitting(true);
+    try {
+      await appUserService.update(currentUser.userId, {
+        firstName,
+        lastName,
+        email: profile.email,
+        phoneNumber: profile.phone.trim(),
+        otherPhoneNumber: profile.otherPhone,
+      });
+      updateUserProfile({ firstName, lastName });
+      toast.success("Profile updated.");
+    } catch (err) {
+      toast.error(extractErrorMessage(err, "Failed to update profile. Please try again."));
+    } finally {
+      setProfileSubmitting(false);
+    }
+  };
 
   const [passwords, setPasswords] = useState({ current: "", next: "", confirm: "" });
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNext, setShowNext] = useState(false);
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [passwordSuccess, setPasswordSuccess] = useState(false);
 
   const [preferences, setPreferences] = useState({ emailNotifications: true, smsNotifications: false });
 
@@ -69,16 +121,14 @@ export default function SettingsPage() {
     setPasswordError(null);
     try {
       await changePassword(passwords.current, passwords.next);
-      setPasswordSuccess(true);
       setPasswords({ current: "", next: "", confirm: "" });
-      setTimeout(() => setPasswordSuccess(false), 2500);
+      // Password changed server-side means the old session is stale by policy — sign the
+      // user out and send them back to log in fresh, with their username already filled in.
+      toast.success("Password updated. Please sign in again with your new password.");
+      setPrefillUsername(currentUser.username);
+      await logout();
     } catch (err) {
-      const message =
-        err && typeof err === "object" && "response" in err
-          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-          : undefined;
-      setPasswordError(message ?? "Failed to update password. Please try again.");
-    } finally {
+      setPasswordError(extractErrorMessage(err, "Failed to update password. Please try again."));
       setPasswordSubmitting(false);
     }
   };
@@ -132,6 +182,7 @@ export default function SettingsPage() {
                   onChange={(e) => setProfile((p) => ({ ...p, firstName: e.target.value }))}
                   isDark={isDark}
                   required
+                  disabled={profileLoading}
                 />
               </div>
               <div>
@@ -144,6 +195,7 @@ export default function SettingsPage() {
                   onChange={(e) => setProfile((p) => ({ ...p, lastName: e.target.value }))}
                   isDark={isDark}
                   required
+                  disabled={profileLoading}
                 />
               </div>
             </div>
@@ -156,10 +208,14 @@ export default function SettingsPage() {
                 name="email"
                 placeholder="name@farm.com"
                 value={profile.email}
-                onChange={(e) => setProfile((p) => ({ ...p, email: e.target.value }))}
+                onChange={() => {}}
                 isDark={isDark}
                 required
+                disabled
               />
+              <p className={`text-[11px] mt-1.5 px-0.5 ${subText}`}>
+                Email address can&apos;t be changed.
+              </p>
             </div>
 
             <div>
@@ -172,15 +228,17 @@ export default function SettingsPage() {
                 value={profile.phone}
                 onChange={(e) => setProfile((p) => ({ ...p, phone: e.target.value }))}
                 isDark={isDark}
+                disabled={profileLoading}
               />
             </div>
 
             <button
               type="button"
-              onClick={() => alert("Profile updates will be available once the backend is connected.")}
-              className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 active:scale-[0.98] transition-all shadow-sm"
+              onClick={handleSaveProfile}
+              disabled={profileLoading || profileSubmitting}
+              className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 active:scale-[0.98] transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Save Changes
+              {profileSubmitting ? "Saving..." : "Save Changes"}
             </button>
           </div>
         )}
@@ -253,9 +311,6 @@ export default function SettingsPage() {
               </div>
               {passwordError && (
                 <p className="text-[11px] text-red-500 font-semibold mt-3 px-0.5">{passwordError}</p>
-              )}
-              {passwordSuccess && (
-                <p className="text-[11px] text-teal-600 dark:text-teal-400 font-semibold mt-3 px-0.5">Password updated successfully.</p>
               )}
               <button
                 type="button"

@@ -9,6 +9,9 @@ interface AuthContextValue {
   login: (username: string, password: string) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<void>;
   logout: () => Promise<void>;
+  /** Merges a partial profile update into the cached user — e.g. after editing name in Settings,
+   * so the sidebar/top bar reflect it immediately without waiting for the next token refresh. */
+  updateUserProfile: (updates: Partial<Pick<AuthUser, "firstName" | "lastName">>) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -38,8 +41,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
+  const updateUserProfile = (updates: Partial<Pick<AuthUser, "firstName" | "lastName">>) => {
+    setUser((prev) => (prev ? { ...prev, ...updates } : prev));
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, updateUserProfile }}>
       {children}
     </AuthContext.Provider>
   );

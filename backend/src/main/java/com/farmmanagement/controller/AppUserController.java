@@ -6,6 +6,7 @@ import com.farmmanagement.dto.AppUserDto;
 import com.farmmanagement.model.AppUser;
 import com.farmmanagement.service.AppUserService;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
@@ -27,7 +28,9 @@ public class AppUserController {
     public AppUser create(@RequestBody AppUserDto dto) { return service.create(dto); }
 
     @PutMapping("/{id}")
-    public AppUser update(@PathVariable UUID id, @RequestBody AppUserDto dto) { return service.update(id, dto); }
+    public AppUser update(@PathVariable UUID id, @RequestBody AppUserDto dto, Authentication authentication) {
+        return service.update(id, dto, authentication.getName());
+    }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)

@@ -37,9 +37,9 @@ export default function AuthPage() {
           <div>
             <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
               Agrify
-              <span className="text-[10px] uppercase font-bold tracking-widest bg-teal-500/20 text-teal-300 border border-teal-500/30 px-2 py-0.5 rounded-full">
+              {/* <span className="text-[10px] uppercase font-bold tracking-widest bg-teal-500/20 text-teal-300 border border-teal-500/30 px-2 py-0.5 rounded-full">
                 Enterprise
-              </span>
+              </span> */}
             </h1>
             <p className="text-xs text-zinc-300 font-medium">
               Farm & Agriculture Management System
@@ -49,10 +49,10 @@ export default function AuthPage() {
 
         {/* Middle Feature Highlights */}
         <div className="relative z-20 space-y-6 my-auto max-w-lg">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-500/20 border border-teal-500/30 text-teal-300 text-xs font-bold">
+          {/* <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-500/20 border border-teal-500/30 text-teal-300 text-xs font-bold">
             <FontAwesomeIcon icon={faSeedling} className="w-3.5 h-3.5" />
             <span>Streamlined Agricultural Analytics</span>
-          </div>
+          </div> */}
 
           <h2 className="text-3xl xl:text-4xl font-extrabold leading-tight tracking-tight text-white">
             Farm Management & Analytics

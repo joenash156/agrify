@@ -244,7 +244,7 @@ export function DashboardTopBar({ user, onOpenMobileSidebar }: DashboardTopBarPr
             isDark ? "text-zinc-300" : "text-zinc-700"
           }`}
         >
-          {formatGreeting(user?.firstName)} 👋
+          {formatGreeting(user?.firstName)}
         </p>
         <p className="text-[11px] text-zinc-500">{formatFormattedDate()}</p>
       </div>

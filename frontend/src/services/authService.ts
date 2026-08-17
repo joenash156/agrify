@@ -67,4 +67,18 @@ export function isAuthenticated(): boolean {
   return getAccessToken() !== null;
 }
 
+const PREFILL_USERNAME_KEY = "agrify:prefill-username";
+
+/** Call right before a forced logout (e.g. after changing password) so the login form can
+ * greet the user with their username already filled in — one-time use, cleared on read. */
+export function setPrefillUsername(username: string): void {
+  sessionStorage.setItem(PREFILL_USERNAME_KEY, username);
+}
+
+export function consumePrefillUsername(): string | null {
+  const value = sessionStorage.getItem(PREFILL_USERNAME_KEY);
+  if (value !== null) sessionStorage.removeItem(PREFILL_USERNAME_KEY);
+  return value;
+}
+
 export { refreshAccessToken };

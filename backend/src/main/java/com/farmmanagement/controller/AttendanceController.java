@@ -39,5 +39,10 @@ public class AttendanceController {
         return service.clockIn(dto.getUsername(), authentication.getName());
     }
 
-    // No PUT/DELETE: attendance is an append-only log once recorded (view-only after that).
+    // Self-service check-out — the caller may only close out their own attendance record.
+    // The only mutation the append-only attendance log allows after the initial clock-in.
+    @PutMapping("/{id}/check-out")
+    public Attendance checkOut(@PathVariable UUID id, Authentication authentication) {
+        return service.checkOut(id, authentication.getName());
+    }
 }

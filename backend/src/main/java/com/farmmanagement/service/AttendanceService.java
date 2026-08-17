@@ -12,9 +12,11 @@ import com.farmmanagement.model.AppUser;
 import com.farmmanagement.model.Attendance;
 import com.farmmanagement.model.Employment;
 import com.farmmanagement.model.UserAccount;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 @Service
@@ -83,5 +85,25 @@ public class AttendanceService {
         dao.save(item);
 
         return new ClockInResponseDto(user.getFirstName() + " " + user.getLastName(), item.getAttendanceDate(), item.getCheckIn());
+    }
+
+    /** Self-service check-out: the caller may only close out their own attendance record. */
+    public Attendance checkOut(UUID attendanceId, String callerUsername) {
+        UserAccount account = userAccountDao.findByUsername(callerUsername)
+                .orElseThrow(() -> new RuntimeException("Account not found"));
+        Attendance attendance = findById(attendanceId);
+        Employment employment = employmentDao.findActiveByUserId(account.getUserId())
+                .orElseThrow(() -> new RuntimeException("This user has no active employment record"));
+
+        if (!attendance.getEmploymentId().equals(employment.getEmploymentId())) {
+            throw new AccessDeniedException("You can only check out your own attendance record");
+        }
+        if (attendance.getCheckOut() != null) {
+            throw new RuntimeException("This attendance record has already been checked out");
+        }
+
+        attendance.setCheckOut(LocalTime.now().withNano(0));
+        dao.update(attendanceId, attendance);
+        return attendance;
     }
 }

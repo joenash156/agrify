@@ -30,4 +30,5 @@ export interface AuthInputProps {
   right?: ReactNode;
   autoComplete?: string;
   required?: boolean;
+  disabled?: boolean;
 }
